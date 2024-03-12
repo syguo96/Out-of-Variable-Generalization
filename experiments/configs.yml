@@ -1,0 +1,6 @@
+dataset:
+  num_samples: 100000
+  split_fraction: 0.9
+  noise_var: 0.1
+  noise_skew: 0
+  noise_mean: 0
