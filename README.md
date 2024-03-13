@@ -41,7 +41,7 @@ Thus by modelling the residual distribution from the source environment, we devi
 
 **Dependencies**
 1. Create a python 3.6+ environment 
-2. Run `pip install the requirements.txt` 
+2. Run `pip install -r requirements.txt` 
 
 ### Experiments
 * Get the contour plots in Fig 1 (b) - (e)
