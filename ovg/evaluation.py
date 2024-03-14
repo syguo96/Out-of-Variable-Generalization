@@ -1,8 +1,9 @@
 from os.path import join
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-
+import logging
 
 plt.rcParams.update(
     {
@@ -21,6 +22,7 @@ plt.rcParams.update(
 def compute_zero_shot_loss(
     ReferencePredictor, predictors_dict, data_target, num_samples=1000, systematic=False
 ):
+    logger = logging.getLogger("ovg-zero-shot-loss")
     data_target = data_target.loc[: num_samples - 1, :]
     reference = ReferencePredictor(data_target)
 
@@ -29,13 +31,16 @@ def compute_zero_shot_loss(
         y_target = predictor(data_target)
         losses[name] = (np.square(y_target - reference)).mean()
         if systematic:
-            y_observed = data_target['Y'][: num_samples]
+            y_observed = data_target["Y"][:num_samples]
             losses[name] = (np.square(y_target - y_observed)).mean()
-    print(losses)
+
+    for k, v in losses.items():
+        logger.info(f"loss {k}:\t{v}")
     return losses
 
 
 def visualize_zero_shot(predictors_dict, data, save_dir, num_samples=2500):
+    logger = logging.getLogger("ovg-visualize_zero_shot")
     num_samples_per_dim = int(np.sqrt(num_samples))
     num_samples = num_samples_per_dim**2
 
@@ -50,14 +55,14 @@ def visualize_zero_shot(predictors_dict, data, save_dir, num_samples=2500):
     }
     eval_df = pd.DataFrame(eval_frame)
     for i, (name, predictor) in enumerate(predictors_dict.items()):
-        print(f"Visualizing {name} predictor")
+        logger.info(f"Visualizing {name} predictor")
         Y_pred = predictor(eval_df).reshape(num_samples_per_dim, num_samples_per_dim)
-        fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(12,6))
+        fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(12, 6))
         ax.contour(X1, X2, Y_pred, linewidths=10)
-        ax.set_xlabel(r'$X_2$', fontsize=60, weight ='bold')
-        ax.set_ylabel(r'$X_3$', fontsize=60, weight='bold')
+        ax.set_xlabel(r"$X_2$", fontsize=60, weight="bold")
+        ax.set_ylabel(r"$X_3$", fontsize=60, weight="bold")
         ax.set_xticks([])
         ax.set_yticks([])
         plt.tight_layout()
-        plt.savefig(join(save_dir, "zero_shot_"+str(name)+".pdf"))
+        plt.savefig(join(save_dir, "zero_shot_" + str(name) + ".pdf"))
         plt.show()

@@ -1,4 +1,3 @@
-from pprint import pformat
 import logging
 import random
 import sys

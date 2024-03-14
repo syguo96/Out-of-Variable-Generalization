@@ -1,14 +1,30 @@
-import numpy as np
-import yaml
-from data.generate_data import ablation_generation
-from predictors import MarginalPredictor, ProposedPredictor, OptimalPredictor, ImputedPredictor
-from evaluation import compute_zero_shot_loss
-from utils.plot_utils import *
+from ovg_experiments.datagen_settings import DataGenSettings
+from pathlib import Path
+from datetime import datetime
+import sys
+import logging
+from ovg_experiments.ablation_common import ExperimentConfig
 import random
-import torch
 from itertools import product
 
-def set_seed(seed: int = 42) -> None:
+import numpy as np
+import torch
+import yaml
+from ovg.evaluation import compute_zero_shot_loss
+from ovg.predictors import (
+    ImputedPredictor,
+    MarginalPredictor,
+    OptimalPredictor,
+    ProposedPredictor,
+)
+
+from ovg_experiments.ablation_common import ablation_generation, Level, Mode
+import os
+
+predictors = ("Proposed", "Oracle", "Marginal", "Imputation")
+
+
+def _set_seed(seed: int) -> None:
     np.random.seed(seed)
     random.seed(seed)
     torch.manual_seed(seed)
@@ -18,96 +34,186 @@ def set_seed(seed: int = 42) -> None:
     os.environ["PYTHONHASHSEED"] = str(seed)
     print(f"Random seed set as {seed}")
 
-def run_experiment(dataset, lr=0.01, hidden_size=64, num_epochs = 50):
+
+def _run_experiment(dataset, lr=0.01, hidden_size=64, num_epochs=50):
 
     reference_predictor = OptimalPredictor()
-    proposed_predictor = ProposedPredictor(lr = lr, hidden_size = hidden_size, num_epochs = num_epochs)
+    proposed_predictor = ProposedPredictor(
+        lr=lr, hidden_size=hidden_size, num_epochs=num_epochs
+    )
     marginal_predictor = MarginalPredictor()
     imputation_predictor = ImputedPredictor()
 
-    for pred in [reference_predictor, proposed_predictor, marginal_predictor, imputation_predictor]:
+    for pred in [
+        reference_predictor,
+        proposed_predictor,
+        marginal_predictor,
+        imputation_predictor,
+    ]:
         pred.fit(dataset.data_source, dataset.data_target)
 
-
-    predictors_dict = {"Proposed": proposed_predictor}
-    predictors_dict["Oracle"] = reference_predictor
-    predictors_dict["Marginal"] = marginal_predictor
-    predictors_dict["Imputation"] = imputation_predictor
+    predictors_dict = {
+        "Proposed": proposed_predictor,
+        "Oracle": reference_predictor,
+        "Marginal": marginal_predictor,
+        "Imputation": imputation_predictor,
+    }
 
     loss = compute_zero_shot_loss(
-        reference_predictor, predictors_dict, dataset.data_target, num_samples=1000, systematic=True
+        reference_predictor,
+        predictors_dict,
+        dataset.data_target,
+        num_samples=1000,
+        systematic=True,
     )
 
     return loss
 
-def ablation_studies(base_path,  noise, num_runs=5, mode='linear', lr = 0.01, hidden_size = 64, epoch = 50):
-    set_seed()
-    with open(join(base_path, "configs.yml"), "r") as f:
-        settings = yaml.safe_load(f)
-    settings['dataset']['num_samples'] = 10000
 
-    results = {'level0': {'proposed': [], 'marginal': [], 'oracle': [], 'imputation': []},
-               'level1': {'proposed': [], 'marginal': [], 'oracle': [], 'imputation': []},
-               'level2': {'proposed': [], 'marginal': [], 'oracle': [], 'imputation': []}}
+def ablation_studies(
+    datagen_settings: DataGenSettings,
+    noise,
+    num_runs=5,
+    mode=Mode.linear,
+    lr=0.01,
+    hidden_size=64,
+    epoch=50,
+):
+    results = {level: {k: [] for k in predictors} for level in Level}
 
     for run in range(num_runs):
-        for level in [0, 1, 2]:
-            dataset = ablation_generation(base_path, settings['dataset'], level, mode, noise=noise)
-            loss = run_experiment(dataset, lr =lr, hidden_size=hidden_size, num_epochs=epoch)
-            results['level'+str(level)]['proposed'].append(loss['Proposed'])
-            results['level' + str(level)]['marginal'].append(loss['Marginal'])
-            results['level' + str(level)]['oracle'].append(loss['Oracle'])
-            results['level' + str(level)]['imputation'].append(loss['Imputation'])
-
+        for level in Level:
+            dataset = ablation_generation(datagen_settings, level, mode, noise=noise)
+            loss = _run_experiment(
+                dataset, lr=lr, hidden_size=hidden_size, num_epochs=epoch
+            )
+            for predictor in predictors:
+                results[level][predictor].append(loss[predictor])
     return results
 
-def calculate_mean_summary_table(summary_noises, modes, noises, predictors, levels):
-    mean_table = {str(n): {mode: {level: {predictor: {'mean': [], 'std': []} for predictor in predictors} for level in levels} for mode in modes} for n in noises}
-    perc_increase_table = {str(n): {mode: {level: {predictor: {'perc': []} for predictor in predictors} for level in levels} for mode in modes} for n in noises}
+
+def _calculate_mean_summary_table(summary_noises, modes, noises, predictors, levels):
+    mean_table = {
+        str(n): {
+            mode: {
+                level: {predictor: {"mean": [], "std": []} for predictor in predictors}
+                for level in levels
+            }
+            for mode in modes
+        }
+        for n in noises
+    }
+    perc_increase_table = {
+        str(n): {
+            mode: {
+                level: {predictor: {"perc": []} for predictor in predictors}
+                for level in levels
+            }
+            for mode in modes
+        }
+        for n in noises
+    }
     for n in noises:
         for mode in modes:
             for key in summary_noises[str(n)][mode].keys():
                 for predictor in predictors:
                     mean = np.mean(summary_noises[str(n)][mode][key][predictor])
                     std = np.std(summary_noises[str(n)][mode][key][predictor])
-                    mean_table[str(n)][mode][key][predictor]['mean'] = mean
-                    mean_table[str(n)][mode][key][predictor]['std'] = std
+                    mean_table[str(n)][mode][key][predictor]["mean"] = mean
+                    mean_table[str(n)][mode][key][predictor]["std"] = std
                 for predictor in predictors:
-                    oracle_mean = mean_table[str(n)][mode][key]['oracle']['mean']
-                    cur_mean = mean_table[str(n)][mode][key][predictor]['mean']
-                    perc_increase_table[str(n)][mode][key][predictor]['perc'] = (cur_mean - oracle_mean)/oracle_mean
-    print('mean_table', mean_table)
-
+                    oracle_mean = mean_table[str(n)][mode][key]["oracle"]["mean"]
+                    cur_mean = mean_table[str(n)][mode][key][predictor]["mean"]
+                    perc_increase_table[str(n)][mode][key][predictor]["perc"] = (
+                        cur_mean - oracle_mean
+                    ) / oracle_mean
+    print("mean_table", mean_table)
 
     return mean_table, perc_increase_table
 
-def main():
 
-    lrs = [0.01]
-    hidden_sizes = [64]
-    epochs = [50]
-    noises = [0.01, 0.2, 0.4, 0.6, 0.8, 1]
-    predictors = ['proposed', 'marginal', 'oracle', 'imputation']
-    levels = ['level0', 'level1', 'level2']
-    modes = ['linear'] #['linear', 'general']
+class _Config:
+    def __init__(self, num_samples, lrs, hidden_sizes, epochs, num_runs, noises, modes):
+        self.num_samples = num_samples
+        self.lrs = lrs
+        self.hidden_sizes = hidden_sizes
+        self.epochs = epochs
+        self.num_runs = num_runs
+        self.noises = noises
+        self.modes = modes
 
-    summary_noises = {str(n): {mode: None} for mode in modes for n in noises}
-    for n in noises:
-        for lr, hidden_size, epoch in product(lrs, hidden_sizes, epochs):
-            for mode in modes:
-                base_path = "experiments"
-                summary_noises[str(n)][mode] = ablation_studies(base_path, n, mode = mode, lr = lr, hidden_size = hidden_size, epoch = epoch)
-                print(f"learning rate {lr}, hidden_size {hidden_size}, num of epochs {epoch}, noise {n}, mode {mode}")
-                print('result:', summary_noises[str(n)][mode])
+    @classmethod
+    def get_default(cls):
+        num_samples = 10000
+        lrs = (0.01,)
+        hidden_sizes = (64,)
+        epochs = (50,)
+        num_runs = 5
+        noises = (0.01, 0.2, 0.4, 0.6, 0.8, 1)
+        modes = (Mode.linear,)
+        return cls(num_samples, lrs, hidden_sizes, epochs, num_runs, noises, modes)
 
-    save_path = "experiments/ablation"
-    np.save(save_path + '/summary_noises.npy', summary_noises)
-
-    mean_table = calculate_mean_summary_table(summary_noises, modes, noises, predictors, levels)
-    np.save(save_path + '/mean_table_noises.npy', mean_table)
-
+    @classmethod
+    def get_testing(cls):
+        num_samples = 25
+        lrs = (0.01,)
+        hidden_sizes = (8,)
+        epochs = (10,)
+        num_runs = 2
+        noises = (
+            0.01,
+            0.2,
+        )
+        modes = (Mode.linear,)
+        return cls(num_samples, lrs, hidden_sizes, epochs, num_runs, noises, modes)
 
 
 if __name__ == "__main__":
-   main()
 
+    logging.basicConfig(
+        level=logging.INFO,
+        handlers=[logging.StreamHandler(sys.stdout)],
+    )
+
+    logger = logging.getLogger("ablation-studies-with-noise")
+
+    _set_seed(42)
+
+    results_dir = (
+        Path.cwd()
+        / f'results_ablation_with_noise_{datetime.now().strftime("%y_%m_%d_%H_%M_%S")}'
+    )
+    config = _Config.get_default()
+
+    datagen_settings = DataGenSettings.get_default()
+
+    summary_noises = {
+        str(n): {mode: None} for mode in config.modes for n in config.noises
+    }
+    for noise in config.noises:
+        for lr, hidden_size, epoch in product(
+            config.lrs, config.hidden_sizes, config.epochs
+        ):
+            for mode in config.modes:
+                summary_noises[str(noise)][mode] = ablation_studies(
+                    datagen_settings,
+                    noise,
+                    config.num_runs,
+                    mode,
+                    lr,
+                    hidden_size,
+                    epoch,
+                )
+                logger.info(f"learning rate:\t{lr}")
+                logger.info(f"hidden size:\t{hidden_size}")
+                logger.info(f"epochs:\t{epoch}")
+                logger.info(f"noise:\t{noise}")
+                logger.info(f"mode:\t{mode.name}")
+                logger.info(f"\tresult:\t{summary_noises[str(noise)][mode]:.3f}")
+
+    np.save(results_dir / "summary_noises.npy", summary_noises)
+
+    mean_table = _calculate_mean_summary_table(
+        summary_noises, config.modes, config.noises, predictors, config.levels
+    )
+    np.save(results_dir / "mean_table_noises.npy", mean_table)

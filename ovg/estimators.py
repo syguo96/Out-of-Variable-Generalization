@@ -2,9 +2,11 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
+from torch.utils.data import DataLoader
+import logging
+
 
 class Dataset(torch.utils.data.Dataset):
     def __init__(self, x_data, y_data):
@@ -21,7 +23,8 @@ class Dataset(torch.utils.data.Dataset):
 
 
 def estimate_cond_mean(X, Y):
-    print("Training neural network to estimate a conditional mean")
+    logger = logging.getLogger("ovg-estimator-cond-mean")
+    logger.info("Training neural network to estimate a conditional mean")
     train_loader, test_loader = build_train_test_loaders(X, Y)
 
     input_size = X.shape[1]
@@ -34,7 +37,16 @@ def estimate_cond_mean(X, Y):
     return model
 
 
-def estimate_cond_skew(model_regression_source, X_source, Y_source, X_target, hidden_size=64, lr=0.01, num_epochs=50):
+def estimate_cond_skew(
+    model_regression_source,
+    X_source,
+    Y_source,
+    X_target,
+    hidden_size=64,
+    lr=0.01,
+    num_epochs=50,
+):
+    logger = logging.getLogger("ovg-estimator-cond-skew")
     X_target_mean = np.mean(X_target)
     X_target_skew = np.mean((X_target - X_target_mean) ** 3)
     assert X_target_skew != 0
@@ -54,20 +66,23 @@ def estimate_cond_skew(model_regression_source, X_source, Y_source, X_target, hi
     )
 
     z_scaler = StandardScaler()
-    print("Training neural network to estimate a conditional skew")
+    logger.info("training neural network to estimate a conditional skew")
     train_loader, test_loader = build_train_test_loaders(X_source, z, y_scaler=z_scaler)
 
     input_size = X_source.shape[1]
-    #hidden_size =64
+    # hidden_size =64
     output_size = 1
     model = NeuralNetwork(input_size, hidden_size, output_size)
-    train(model, train_loader, num_epochs=num_epochs, lr = lr)
+    train(model, train_loader, num_epochs=num_epochs, lr=lr)
     test(model, test_loader)
 
     return model, z_scaler
 
 
-def train(model, train_loader, verbose=True, num_epochs=10, lr=0.01, weight_decay=1.e-4):
+def train(
+    model, train_loader, verbose=True, num_epochs=10, lr=0.01, weight_decay=1.0e-4
+):
+    logger = logging.getLogger("ovg-training")
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
 
@@ -83,12 +98,13 @@ def train(model, train_loader, verbose=True, num_epochs=10, lr=0.01, weight_deca
 
         avg_loss /= len(train_loader)
         if verbose and (epoch + 1) % 2 == 0:
-            print(f"Epoch: {epoch + 1}, Loss: {avg_loss.item()}")
+            logger.info(f"Epoch: {epoch + 1}\tLoss: {avg_loss.item():.4f}")
 
     return avg_loss
 
 
-def test(model, test_loader, verbose=True):
+def test(model, test_loader):
+    logger = logging.getLogger("ovg-test")
     criterion = nn.MSELoss()
     avg_acc = 0
     avg_loss = 0
@@ -99,8 +115,7 @@ def test(model, test_loader, verbose=True):
             test_acc = ((targets > 3) == (y_pred > 3)).float().mean()
             avg_loss += test_loss
             avg_acc += test_acc
-    if verbose:
-        print("Test Loss:", avg_loss / len(test_loader))
+    logger.debug(f"Test Loss: {(avg_loss / len(test_loader)):.4f}")
 
     return (avg_loss / len(test_loader)).item()
 
@@ -113,7 +128,6 @@ def build_train_test_loaders(X, Y, batch_size=64, y_scaler=None):
     if y_scaler:
         y_train = y_scaler.fit_transform(y_train).flatten()
         y_test = y_scaler.transform(y_test).flatten()
-
 
     train_dataset = Dataset(X_train, y_train)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)

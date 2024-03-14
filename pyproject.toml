@@ -1,0 +1,29 @@
+[project]
+name = "ovg"
+version = "0.1.0"
+description = "Out-of-Variable-Generalization."
+readme = "README.md"
+authors = [
+    { name = "Siyuan Guo", email = "siyuan.guo@tuebingen.mpg.de" },
+]
+requires-python = ">=3.6"
+classifiers = [
+    "Programming Language :: Python :: 3",
+]
+dependencies = [
+    "numpy",
+    "pandas",
+    # Add other dependencies here
+]
+
+[project.urls]
+Homepage = "https://arxiv.org/abs/2304.07896"
+Source = "https://github.com/syguo96/Out-of-Variable-Generalization"
+
+
+[tool.setuptools]
+packages = ["ovg","ovg_experiments"]
+
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
