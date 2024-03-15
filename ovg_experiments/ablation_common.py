@@ -1,101 +1,32 @@
-from enum import Enum
-from typing import cast
-from typing import Dict
-from typing import Any
+from tabulate import tabulate
+from typing import List
+from typing import Iterable
 import logging
+import os
+import random
+from enum import Enum
 from pathlib import Path
-import ast
+from typing import Dict
 
-import h5py
 import numpy as np
 import pandas as pd
+import torch
+from ovg.evaluation import compute_zero_shot_loss
+from ovg.predictors import (
+    ImputedPredictor,
+    MarginalPredictor,
+    OptimalPredictor,
+    ProposedPredictor,
+)
 
 from .datagen_settings import DataGenSettings
+from .simulated_data import SimulatedData
 
 
-def scale_max_min(x):
-    return 5 * (x - np.min(x)) / (np.max(x) - np.min(x))
-
-
-def _recursive_hdf5_save(group, d):
-    for k, v in d.items():
-        if v is None:
-            continue
-        elif isinstance(v, dict):
-            next_group = group.create_group(k)
-            _recursive_hdf5_save(next_group, v)
-        elif isinstance(v, np.ndarray):
-            group.create_dataset(k, data=v)
-        elif isinstance(v, pd.DataFrame):
-            group.create_dataset(k, data=v.to_records(index=False))
-        elif isinstance(v, (int, float, str, list)):
-            group.create_dataset(k, data=v)
-        else:
-            raise TypeError(f"Cannot save datatype {type(v)} as hdf5 dataset.")
-
-
-def _recursive_hdf5_load(group):
-    d = {}
-    for k, v in group.items():
-        if isinstance(v, h5py.Group):
-            d[k] = _recursive_hdf5_load(v)
-        else:
-            d[k] = v[...]
-            # If the array has column names, load it as a pandas DataFrame
-            if d[k].dtype.names is not None:
-                d[k] = pd.DataFrame(d[k])
-            # Convert arrays of size 1 to scalars
-            elif d[k].size == 1:
-                d[k] = d[k].item()
-                if isinstance(d[k], bytes):
-                    # Assume this is a string.
-                    d[k] = d[k].decode()
-            # If an array is 1D and of type object, assume it originated as a list
-            # of strings.
-            elif d[k].ndim == 1 and d[k].dtype == "O":
-                d[k] = [x.decode() for x in d[k]]
-    return d
-
-
-class SimulatedData(object):
-
-    __slots__ = ("data_source", "data_target", "settings")
-
-    def __init__(self) -> None:
-        for attr in self.__slots__:
-            setattr(self, attr, None)
-
-    @classmethod
-    def from_file(cls, file_path: Path) -> "SimulatedData":
-        logger = logging.getLogger("simulated data")
-        logger.info(f"loading dataset {file_path}")
-        instance = cls()
-        with h5py.File(str(file_path), "r") as f:
-            # Load only the keys that the class expects
-            loaded_dict = _recursive_hdf5_load(f)
-            for k, v in loaded_dict.items():
-                setattr(instance, k, v)
-            instance.settings = ast.literal_eval(f.attrs["settings"])  # type: ignore
-        return instance
-
-    def to_file(self, file_path: Path, mode="w") -> None:
-        logger = logging.getLogger("simulated data")
-        logger.info("saving dataset to {file_path}")
-        save_dict = {attr: getattr(self, attr) for attr in self.__slots__}
-        with h5py.File(str(file_path), mode) as f:
-            _recursive_hdf5_save(f, save_dict)
-            if self.settings:  # type: ignore
-                f.attrs["settings"] = str(self.settings)  # type: ignore
-
-    def to_dictionary(self) -> Dict[str, Any]:
-        return {attr: getattr(self, attr) for attr in self.__slots__}
-
-    @classmethod
-    def from_dictionary(cls, dictionary: dict) -> "SimulatedData":
-        instance = cast("SimulatedData", cls())
-        for k, v in dictionary.items():
-            setattr(instance, k, v)
-        return instance
+class ExperimentType(Enum):
+    polynomial = 0
+    nonlinear = 1
+    trigonometric = 2
 
 
 class Mode(Enum):
@@ -119,6 +50,64 @@ class Level(Enum):
 
     def __ge__(self, other):
         return self.value >= other.value
+
+
+class PredictorType(Enum):
+    proposed = 0
+    oracle = 1
+    marginal = 2
+    imputation = 3
+
+
+class AblationStudyConfig:
+    def __init__(self, num_samples, lrs, hidden_sizes, epochs, num_runs, noises, modes):
+        self.num_samples = num_samples
+        self.lrs = lrs
+        self.hidden_sizes = hidden_sizes
+        self.epochs = epochs
+        self.num_runs = num_runs
+        self.noises = noises
+        self.modes = modes
+
+    @classmethod
+    def get_default(cls):
+        num_samples = 10000
+        lrs = (0.01,)
+        hidden_sizes = (64,)
+        epochs = (50,)
+        num_runs = 5
+        noises = (0.01, 0.2, 0.4, 0.6, 0.8, 1)
+        modes = (Mode.linear,)
+        return cls(num_samples, lrs, hidden_sizes, epochs, num_runs, noises, modes)
+
+    @classmethod
+    def get_testing(cls):
+        num_samples = 25
+        lrs = (0.01,)
+        hidden_sizes = (8,)
+        epochs = (10,)
+        num_runs = 2
+        noises = (
+            0.01,
+            0.2,
+        )
+        modes = (Mode.linear,)
+        return cls(num_samples, lrs, hidden_sizes, epochs, num_runs, noises, modes)
+
+
+def set_seed(seed: int) -> None:
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    print(f"Random seed set as {seed}")
+
+
+def scale_max_min(x):
+    return 5 * (x - np.min(x)) / (np.max(x) - np.min(x))
 
 
 def _gaussian_kernel(xdata, l1, sigma_f, sigma_noise=2e-2):
@@ -147,7 +136,7 @@ def _y_gp(x, l1_scale=2, sigmaf_scale=1):
     return y
 
 
-def ablation_generation(
+def ablation_simulated_data_generation(
     datagen_settings: DataGenSettings,
     level: Level,
     mode: Mode,
@@ -225,3 +214,150 @@ def ablation_generation(
     dataset = SimulatedData.from_dictionary(data)
 
     return dataset
+
+
+def _run_ablation_experiment(
+    dataset, lr=0.01, hidden_size=64, num_epochs=50
+) -> Dict[PredictorType, float]:
+
+    reference_predictor = OptimalPredictor()
+    proposed_predictor = ProposedPredictor(
+        lr=lr, hidden_size=hidden_size, num_epochs=num_epochs
+    )
+    marginal_predictor = MarginalPredictor()
+    imputation_predictor = ImputedPredictor()
+
+    for pred in [
+        reference_predictor,
+        proposed_predictor,
+        marginal_predictor,
+        imputation_predictor,
+    ]:
+        pred.fit(dataset.data_source, dataset.data_target)
+
+    predictors_dict = {
+        PredictorType.proposed: proposed_predictor,
+        PredictorType.oracle: reference_predictor,
+        PredictorType.marginal: marginal_predictor,
+        PredictorType.imputation: imputation_predictor,
+    }
+
+    loss = compute_zero_shot_loss(
+        reference_predictor,
+        predictors_dict,
+        dataset.data_target,
+        num_samples=1000,
+        systematic=True,
+    )
+
+    return loss
+
+
+class AblationStudyResults:
+
+    def __init__(self):
+        self._results = {
+            level: {pred_type: [] for pred_type in PredictorType} for level in Level
+        }
+
+    def raw(self):
+        return self._results
+
+    def add_loss(
+        self, level: Level, predictor_type: PredictorType, loss: float
+    ) -> None:
+        self._results[level][predictor_type].append(loss)
+
+    def get_losses(self, level: Level, predictor_type: PredictorType) -> None:
+        return self._results[level][predictor_type]
+
+    def get_mean(self, level: Level, predictor_type: PredictorType):
+        return np.mean(self.get_losses(level, predictor_type))
+
+    def get_std(self, level: Level, predictor_type: PredictorType):
+        return np.std(self.get_losses(level, predictor_type))
+
+    def summary_dict(self, with_perc: bool = False):
+        r = {
+            level: {
+                pred_type: {
+                    "mean": self.get_mean(level, pred_type),
+                    "std": self.get_std(level, pred_type),
+                }
+                for pred_type in PredictorType
+            }
+            for level in Level
+        }
+        if not with_perc:
+            return r
+        for level in Level:
+            oracle_mean = r[level][PredictorType.oracle]["mean"]
+            for pred_type in PredictorType:
+                mean = r[level][pred_type]["mean"]
+                increase = (mean - oracle_mean) / oracle_mean
+                r[level][pred_type]["perc"] = increase
+        return
+
+    def save(self, target_dir: Path) -> None:
+        target_dir.mkdir(exist_ok=True, parents=True)
+        np.save(target_dir / "results.npy", self._results)
+        np.save(target_dir / "summary.npy", self.summary_dict())
+
+
+def _get_means(
+    results: Iterable[AblationStudyResults], level: Level, predictor_type: PredictorType
+) -> List[float]:
+    return [r.get_mean(level, predictor_type) for r in results]
+
+
+def _get_stds(
+    results: Iterable[AblationStudyResults], level: Level, predictor_type: PredictorType
+) -> List[float]:
+    return [r.get_std(level, predictor_type) for r in results]
+
+
+def get_summary(results: Iterable[AblationStudyResults]):
+    return {
+        level: {
+            pred_type: {
+                "mean": _get_means(results, level, pred_type),
+                "std": _get_stds(results, level, pred_type),
+            }
+            for pred_type in PredictorType
+        }
+        for level in Level
+    }
+
+
+def format_summary(summary):
+    table_data = []
+    headers = ["Level", "Method", "Mean", "Std"]
+    for level, methods in summary.items():
+        for method, stats in methods.items():
+            row = [level, method] + stats["mean"] + stats["std"]
+            table_data.append(row)
+    return tabulate(table_data, headers=headers)
+
+
+def ablation_studies(
+    data_generation_settings: DataGenSettings,
+    mode: Mode,
+    num_runs: int,
+    lr,
+    hidden_size,
+    epoch,
+    noise=0.1,
+) -> AblationStudyResults:
+    results = AblationStudyResults()
+    for run in range(num_runs):
+        for level in (Level.level0, Level.level1, Level.level2):
+            dataset = ablation_simulated_data_generation(
+                data_generation_settings, level, mode, noise=noise
+            )
+            loss = _run_ablation_experiment(
+                dataset, lr=lr, hidden_size=hidden_size, num_epochs=epoch
+            )
+            for predictor_type, loss_value in loss.items():
+                results.add_loss(level, predictor_type, loss_value)
+
+    return results

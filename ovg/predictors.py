@@ -9,6 +9,9 @@ class Predictor:
         self.mc_samples = 1000
         self.data_source = self.data_target = None
 
+    def fit(self, data_source, data_target):
+        raise NotImplementedError()
+
 
 class MarginalPredictor(Predictor):
     def __init__(self):

@@ -2,16 +2,9 @@ import numpy as np
 import pandas as pd
 from scipy.stats import skew
 
-from ovg_experiments.ablation_common import scale_max_min, SimulatedData
+from ovg_experiments.ablation_common import (ExperimentType, SimulatedData,
+                                             scale_max_min)
 from ovg_experiments.datagen_settings import DataGenSettings
-
-from enum import Enum
-
-
-class ExperimentType(Enum):
-    polynomial = 0
-    nonlinear = 1
-    trigonometric = 2
 
 
 def generate_simulated_data(
