@@ -12,12 +12,14 @@ from ovg.predictors import (
     MarginalPredictor,
     OptimalPredictor,
     ProposedPredictor,
+    PredictorType,
 )
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
+from typing import Dict, List
 
 
-def _set_all_seeds(seed):
+def _set_all_seeds(seed: int) -> None:
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -25,9 +27,11 @@ def _set_all_seeds(seed):
     torch.backends.cudnn.deterministic = True
 
 
-def _run(nb_iterations=10, fixed_seed=True):
+def _run(
+    nb_iterations: int, num_samples: int, fixed_seed: bool
+) -> Dict[PredictorType, List[float]]:
 
-    def _iteration():
+    def _iterate(num_samples) -> Dict[PredictorType, float]:
         df = sm.datasets.get_rdataset("mtcars", "datasets", cache=True).data
         nsamples = 200
         augmented_df = df.sample(nsamples, replace=True)
@@ -49,45 +53,38 @@ def _run(nb_iterations=10, fixed_seed=True):
             scaler.fit_transform(data_target), columns=["Y", "X_0", "X_1", "X_2"]
         )
 
-        reference_predictor = OptimalPredictor()
-        proposed_predictor = ProposedPredictor()
-        marginal_predictor = MarginalPredictor()
-        imputation_predictor = ImputedPredictor()
+        predictors_dict = {
+            PredictorType.oracle: OptimalPredictor(),
+            PredictorType.proposed: ProposedPredictor(),
+            PredictorType.marginal: MarginalPredictor(),
+            PredictorType.imputation: ImputedPredictor(),
+        }
 
-        reference_predictor.fit(data_source, data_target)
-        marginal_predictor.fit(data_source, data_target)
-        proposed_predictor.fit(data_source, data_target)
-        imputation_predictor.fit(data_source, data_target)
+        for predictor in predictors_dict.values():
+            predictor.fit(data_source, data_target)
 
-        # compute zero-shot loss
-        predictors_dict = {"Proposed": proposed_predictor}
-        predictors_dict["Optimal"] = reference_predictor
-        predictors_dict["Marginal"] = marginal_predictor
-        predictors_dict["MeanImputed"] = imputation_predictor
         losses = compute_zero_shot_loss(
-            reference_predictor, predictors_dict, data_target, num_samples=1000
+            predictors_dict[PredictorType.oracle],
+            predictors_dict,
+            data_target,
+            num_samples=num_samples,
         )
         return losses
 
-    proposed_loss = []
-    marginal_loss = []
-    imputed_loss = []
+    predictor_losses: Dict[PredictorType, List[float]] = {
+        PredictorType.proposed: [],
+        PredictorType.marginal: [],
+        PredictorType.imputation: [],
+    }
 
     for iteration in range(nb_iterations):
         if fixed_seed:
             _set_all_seeds(iteration)
-        losses = _iteration()
-        proposed_loss.append(losses["Proposed"])
-        marginal_loss.append(losses["Marginal"])
-        imputed_loss.append(losses["MeanImputed"])
+        losses = _iterate(num_samples)
+        for predictor_type, losses_list in predictor_losses.items():
+            losses_list.append(losses[predictor_type])
 
-    return proposed_loss, marginal_loss, imputed_loss
-
-
-def _log_results(logger, label, data):
-    mean = np.mean(data)
-    variance = np.var(data)
-    logger.info(f"{label:<10} mean: {mean:.4f}, variance: {variance:.4f}")
+    return predictor_losses
 
 
 if __name__ == "__main__":
@@ -97,10 +94,19 @@ if __name__ == "__main__":
         handlers=[logging.StreamHandler(sys.stdout)],
     )
 
-    proposed_loss, marginal_loss, imputed_loss = _run(nb_iterations=10, fixed_seed=True)
+    nb_iterations = 10
+    num_samples = 1000
+    fixed_seed = True
+
+    predictor_losses: Dict[PredictorType, List[float]] = _run(
+        nb_iterations, num_samples, fixed_seed
+    )
 
     logger = logging.getLogger("real-world-dataset")
     logger.info("Results summary")
-    _log_results(logger, "Proposed", proposed_loss)
-    _log_results(logger, "Marginal", marginal_loss)
-    _log_results(logger, "Imputed", imputed_loss)
+    for predictor_type, losses in predictor_losses.items():
+        mean = np.mean(losses)
+        variance = np.var(losses)
+        logger.info(
+            f"{predictor_type.name:<10} mean: {mean:.4f}, variance: {variance:.4f}"
+        )

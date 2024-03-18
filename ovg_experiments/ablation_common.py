@@ -1,29 +1,26 @@
-from .simulated_data import scale_max_min
-from ovg.predictors import Predictor
-from itertools import product
-from tabulate import tabulate
-from typing import List
-from typing import Iterable
 import logging
 import os
 import random
 from enum import Enum
+from itertools import product
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Iterable, List
 
 import numpy as np
 import pandas as pd
 import torch
 from ovg.evaluation import compute_zero_shot_loss
 from ovg.predictors import (
+    Predictor,
     ImputedPredictor,
     MarginalPredictor,
     OptimalPredictor,
     ProposedPredictor,
+    PredictorType,
 )
+from tabulate import tabulate
 
-from .datagen_settings import DataGenSettings
-from .simulated_data import SimulatedData
+from .simulated_data import DataGenSettings, SimulatedData, scale_max_min
 
 
 class Mode(Enum):
@@ -47,13 +44,6 @@ class Level(Enum):
 
     def __ge__(self, other):
         return self.value >= other.value
-
-
-class PredictorType(Enum):
-    proposed = 0
-    oracle = 1
-    marginal = 2
-    imputation = 3
 
 
 class AblationStudyConfig:
@@ -200,12 +190,7 @@ def ablation_simulated_data_generation(
     data_source = pd.DataFrame(data_dict_source)
     data_target = pd.DataFrame(data_dict_target)
 
-    data = {
-        "data_source": data_source,
-        "data_target": data_target,
-        "settings": datagen_settings.to_dict(),
-    }
-    dataset = SimulatedData.from_dictionary(data)
+    dataset = SimulatedData(data_source, data_target, datagen_settings.to_dict())
 
     return dataset
 
@@ -247,7 +232,7 @@ class AblationStudyResults:
     ) -> None:
         self._results[level][predictor_type].append(loss)
 
-    def get_losses(self, level: Level, predictor_type: PredictorType) -> None:
+    def get_losses(self, level: Level, predictor_type: PredictorType) -> List[float]:
         return self._results[level][predictor_type]
 
     def get_mean(self, level: Level, predictor_type: PredictorType):
@@ -333,7 +318,7 @@ def ablation_studies(
     results = AblationStudyResults()
     for run in range(num_runs):
         for level in (Level.level0, Level.level1, Level.level2):
-            dataset = ablation_simulated_data_generation(
+            dataset: SimulatedData = ablation_simulated_data_generation(
                 data_generation_settings,
                 level,
                 mode,

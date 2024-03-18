@@ -1,11 +1,11 @@
+from typing import Type
 from os.path import join
 from typing import Dict
-
+from .predictors import Predictor, PredictorType
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import logging
-from numpy.typing import ArrayLike
 from pandas.core.frame import DataFrame
 import torch.nn as nn
 
@@ -24,23 +24,23 @@ plt.rcParams.update(
 
 
 def compute_zero_shot_loss(
-    ReferencePredictor: nn.Module,
-    predictors_dict: Dict[str, nn.Module],
+    reference_predictor: Predictor,
+    predictors_dict: Dict[PredictorType, Predictor],
     data_target: DataFrame,
     num_samples: int = 1000,
     systematic: bool = False,
-) -> Dict[str, float]:
+) -> Dict[PredictorType, float]:
     logger = logging.getLogger("ovg-zero-shot-loss")
     data_target = data_target.loc[: num_samples - 1, :]
-    reference = ReferencePredictor(data_target)
+    reference = reference_predictor(data_target)
 
-    losses: Dict[str, float] = {}
-    for name, predictor in predictors_dict.items():
+    losses: Dict[PredictorType, float] = {}
+    for predictor_type, predictor in predictors_dict.items():
         y_target = predictor(data_target)
-        losses[name] = (np.square(y_target - reference)).mean()
+        losses[predictor_type] = (np.square(y_target - reference)).mean()
         if systematic:
             y_observed = data_target["Y"][:num_samples]
-            losses[name] = (np.square(y_target - y_observed)).mean()
+            losses[predictor_type] = (np.square(y_target - y_observed)).mean()
 
     for k, v in losses.items():
         logger.info(f"loss {k}:\t{v:.3f}")

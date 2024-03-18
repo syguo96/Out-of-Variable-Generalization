@@ -1,12 +1,13 @@
-from scipy.stats import skew
 import ast
-import h5py
-import numpy as np
-from pathlib import Path
-import pandas as pd
-from typing import cast, Dict, Any
 import logging
 from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, cast
+
+import h5py
+import numpy as np
+import pandas as pd
+from scipy.stats import skew
 
 
 class ExperimentType(Enum):
@@ -59,48 +60,6 @@ def _recursive_hdf5_load(group):
     return d
 
 
-class SimulatedData(object):
-
-    __slots__ = ("data_source", "data_target", "settings")
-
-    def __init__(self) -> None:
-        self.data_source = None
-        self.data_target = None
-        self.settings = None
-
-    @classmethod
-    def from_file(cls, file_path: Path) -> "SimulatedData":
-        logger = logging.getLogger("simulated data")
-        logger.info(f"loading dataset {file_path}")
-        instance = cls()
-        with h5py.File(str(file_path), "r") as f:
-            # Load only the keys that the class expects
-            loaded_dict = _recursive_hdf5_load(f)
-            for k, v in loaded_dict.items():
-                setattr(instance, k, v)
-            instance.settings = ast.literal_eval(f.attrs["settings"])  # type: ignore
-        return instance
-
-    def to_file(self, file_path: Path, mode="w") -> None:
-        logger = logging.getLogger("simulated data")
-        logger.info(f"saving dataset to {file_path}")
-        save_dict = {attr: getattr(self, attr) for attr in self.__slots__}
-        with h5py.File(str(file_path), mode) as f:
-            _recursive_hdf5_save(f, save_dict)
-            if self.settings:  # type: ignore
-                f.attrs["settings"] = str(self.settings)  # type: ignore
-
-    def to_dictionary(self) -> Dict[str, Any]:
-        return {attr: getattr(self, attr) for attr in self.__slots__}
-
-    @classmethod
-    def from_dictionary(cls, dictionary: dict) -> "SimulatedData":
-        instance = cast("SimulatedData", cls())
-        for k, v in dictionary.items():
-            setattr(instance, k, v)
-        return instance
-
-
 class DataGenSettings:
 
     __slots__ = (
@@ -129,6 +88,54 @@ class DataGenSettings:
         noise_skew = 0
         noise_mean = 0
         return cls(num_samples, split_fraction, noise_var, noise_skew, noise_mean)
+
+
+class SimulatedData(object):
+
+    __slots__ = ("data_source", "data_target", "settings")
+
+    def __init__(
+        self,
+        data_source: pd.DataFrame,
+        data_target: pd.DataFrame,
+        settings: Dict[str, Any],
+    ) -> None:
+        self.data_source = data_source
+        self.data_target = data_target
+        self.settings = settings
+
+    @classmethod
+    def from_file(cls, file_path: Path) -> "SimulatedData":
+        logger = logging.getLogger("simulated data")
+        logger.info(f"loading dataset {file_path}")
+        with h5py.File(str(file_path), "r") as f:
+            # Load only the keys that the class expects
+            loaded_dict = _recursive_hdf5_load(f)
+            instance = cls(
+                loaded_dict["data_source"],
+                loaded_dict["data_target"],
+                ast.literal_eval(f.attrs["settings"]),  # type: ignore
+            )
+        return instance
+
+    def to_file(self, file_path: Path, mode="w") -> None:
+        logger = logging.getLogger("simulated data")
+        logger.info(f"saving dataset to {file_path}")
+        save_dict = {attr: getattr(self, attr) for attr in self.__slots__}
+        with h5py.File(str(file_path), mode) as f:
+            _recursive_hdf5_save(f, save_dict)
+            if self.settings:  # type: ignore
+                f.attrs["settings"] = str(self.settings)  # type: ignore
+
+    def to_dictionary(self) -> Dict[str, Any]:
+        return {attr: getattr(self, attr) for attr in self.__slots__}
+
+    @classmethod
+    def from_dictionary(cls, d: dict) -> "SimulatedData":
+        instance = cast(
+            "SimulatedData", cls(d["data_source"], d["data_target"], d["settings"])
+        )
+        return instance
 
 
 def _y_polynomial(x, coeff):

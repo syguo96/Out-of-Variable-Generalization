@@ -1,3 +1,4 @@
+from enum import Enum
 import numpy as np
 import pandas as pd
 import torch
@@ -14,6 +15,9 @@ class Predictor:
         self.data_target: Optional[pd.DataFrame] = None
 
     def fit(self, data_source: pd.DataFrame, data_target: pd.DataFrame) -> None:
+        raise NotImplementedError()
+
+    def __call__(self, data: pd.DataFrame) -> np.ndarray:
         raise NotImplementedError()
 
 
@@ -183,3 +187,10 @@ class ProposedPredictor(Predictor):
             x_pred=X,
             num_samples=self.mc_samples,
         )
+
+
+class PredictorType(Enum):
+    proposed = 0
+    oracle = 1
+    marginal = 2
+    imputation = 3
