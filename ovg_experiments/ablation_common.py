@@ -1,5 +1,5 @@
+from .simulated_data import scale_max_min
 from ovg.predictors import Predictor
-from typing import Optional
 from itertools import product
 from tabulate import tabulate
 from typing import List
@@ -24,12 +24,6 @@ from ovg.predictors import (
 
 from .datagen_settings import DataGenSettings
 from .simulated_data import SimulatedData
-
-
-class ExperimentType(Enum):
-    polynomial = 0
-    nonlinear = 1
-    trigonometric = 2
 
 
 class Mode(Enum):
@@ -107,10 +101,6 @@ def set_seed(seed: int) -> None:
     torch.backends.cudnn.benchmark = False
     os.environ["PYTHONHASHSEED"] = str(seed)
     print(f"Random seed set as {seed}")
-
-
-def scale_max_min(x):
-    return 5 * (x - np.min(x)) / (np.max(x) - np.min(x))
 
 
 def _gaussian_kernel(xdata, l1, sigma_f, sigma_noise=2e-2):

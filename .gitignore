@@ -4,3 +4,5 @@
 *.DS_Store
 *results_*
 *~
+mypy.ini
+*mypy_cache

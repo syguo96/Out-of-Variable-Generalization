@@ -6,23 +6,30 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader
 import logging
+from typing import Tuple, Optional
+
+# For typing hints related to numpy arrays
+from numpy.typing import ArrayLike
+
+# For typing hints related to PyTorch tensors and data types
+from torch import Tensor
 
 
 class Dataset(torch.utils.data.Dataset):
-    def __init__(self, x_data, y_data):
+    def __init__(self, x_data: ArrayLike, y_data: ArrayLike) -> None:
         if y_data.ndim == 1:
             y_data = y_data.reshape(-1, 1)
-        self.x_data = torch.from_numpy(x_data).float()
-        self.y_data = torch.from_numpy(y_data).float()
+        self.x_data: Tensor = torch.from_numpy(x_data).float()
+        self.y_data: Tensor = torch.from_numpy(y_data).float()
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: int) -> Tuple[Tensor, Tensor]:
         return self.x_data[index], self.y_data[index]
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.x_data)
 
 
-def estimate_cond_mean(X, Y):
+def estimate_cond_mean(X: ArrayLike, Y: ArrayLike) -> nn.Module:
     logger = logging.getLogger("ovg-estimator-cond-mean")
     logger.info("Training neural network to estimate a conditional mean")
     train_loader, test_loader = build_train_test_loaders(X, Y)
@@ -38,14 +45,14 @@ def estimate_cond_mean(X, Y):
 
 
 def estimate_cond_skew(
-    model_regression_source,
-    X_source,
-    Y_source,
-    X_target,
-    hidden_size=64,
-    lr=0.01,
-    num_epochs=50,
-):
+    model_regression_source: nn.Module,
+    X_source: ArrayLike,
+    Y_source: ArrayLike,
+    X_target: ArrayLike,
+    hidden_size: int = 64,
+    lr: float = 0.01,
+    num_epochs: int = 50,
+) -> Tuple[nn.Module, StandardScaler]:
     logger = logging.getLogger("ovg-estimator-cond-skew")
     X_target_mean = np.mean(X_target)
     X_target_skew = np.mean((X_target - X_target_mean) ** 3)
@@ -70,7 +77,6 @@ def estimate_cond_skew(
     train_loader, test_loader = build_train_test_loaders(X_source, z, y_scaler=z_scaler)
 
     input_size = X_source.shape[1]
-    # hidden_size =64
     output_size = 1
     model = NeuralNetwork(input_size, hidden_size, output_size)
     train(model, train_loader, num_epochs=num_epochs, lr=lr)
@@ -80,47 +86,55 @@ def estimate_cond_skew(
 
 
 def train(
-    model, train_loader, verbose=True, num_epochs=10, lr=0.01, weight_decay=1.0e-4
-):
+    model: nn.Module,
+    train_loader: DataLoader,
+    verbose: bool = True,
+    num_epochs: int = 10,
+    lr: float = 0.01,
+    weight_decay: float = 1.0e-4,
+) -> float:
     logger = logging.getLogger("ovg-training")
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
 
     for epoch in range(num_epochs):
-        avg_loss = 0
+        avg_loss = 0.0
         for inputs, targets in train_loader:
             optimizer.zero_grad()
             outputs = model(inputs)
             loss = criterion(outputs, targets)
             loss.backward()
             optimizer.step()
-            avg_loss += loss
+            avg_loss += loss.item()
 
         avg_loss /= len(train_loader)
         if verbose and (epoch + 1) % 2 == 0:
-            logger.info(f"Epoch: {epoch + 1}\tLoss: {avg_loss.item():.4f}")
+            logger.info(f"Epoch: {epoch + 1}\tLoss: {avg_loss:.4f}")
 
     return avg_loss
 
 
-def test(model, test_loader):
+def test(model: nn.Module, test_loader: DataLoader) -> float:
     logger = logging.getLogger("ovg-test")
     criterion = nn.MSELoss()
-    avg_acc = 0
-    avg_loss = 0
+    avg_loss = 0.0
     for inputs, targets in test_loader:
         with torch.no_grad():
             y_pred = model(inputs)
             test_loss = criterion(y_pred, targets)
-            test_acc = ((targets > 3) == (y_pred > 3)).float().mean()
-            avg_loss += test_loss
-            avg_acc += test_acc
-    logger.debug(f"Test Loss: {(avg_loss / len(test_loader)):.4f}")
+            avg_loss += test_loss.item()
+    avg_loss /= len(test_loader)
+    logger.debug(f"Test Loss: {avg_loss:.4f}")
 
-    return (avg_loss / len(test_loader)).item()
+    return avg_loss
 
 
-def build_train_test_loaders(X, Y, batch_size=64, y_scaler=None):
+def build_train_test_loaders(
+    X: ArrayLike,
+    Y: ArrayLike,
+    batch_size: int = 64,
+    y_scaler: Optional[StandardScaler] = None,
+) -> Tuple[DataLoader, DataLoader]:
     X_train, X_test, y_train, y_test = train_test_split(
         X, Y, test_size=0.2, random_state=42
     )
@@ -139,12 +153,12 @@ def build_train_test_loaders(X, Y, batch_size=64, y_scaler=None):
 
 
 class NeuralNetwork(nn.Module):
-    def __init__(self, input_size, hidden_size, output_size):
+    def __init__(self, input_size: int, hidden_size: int, output_size: int) -> None:
         super(NeuralNetwork, self).__init__()
         self.fc1 = nn.Linear(input_size, hidden_size)
         self.fc2 = nn.Linear(hidden_size, output_size)
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
         x = torch.relu(self.fc1(x))
         x = self.fc2(x)
         return x

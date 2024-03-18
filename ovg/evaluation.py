@@ -1,9 +1,13 @@
 from os.path import join
+from typing import Dict
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import logging
+from numpy.typing import ArrayLike
+from pandas.core.frame import DataFrame
+import torch.nn as nn
 
 plt.rcParams.update(
     {
@@ -20,13 +24,17 @@ plt.rcParams.update(
 
 
 def compute_zero_shot_loss(
-    ReferencePredictor, predictors_dict, data_target, num_samples=1000, systematic=False
-):
+    ReferencePredictor: nn.Module,
+    predictors_dict: Dict[str, nn.Module],
+    data_target: DataFrame,
+    num_samples: int = 1000,
+    systematic: bool = False,
+) -> Dict[str, float]:
     logger = logging.getLogger("ovg-zero-shot-loss")
     data_target = data_target.loc[: num_samples - 1, :]
     reference = ReferencePredictor(data_target)
 
-    losses = {}
+    losses: Dict[str, float] = {}
     for name, predictor in predictors_dict.items():
         y_target = predictor(data_target)
         losses[name] = (np.square(y_target - reference)).mean()
@@ -39,7 +47,12 @@ def compute_zero_shot_loss(
     return losses
 
 
-def visualize_zero_shot(predictors_dict, data, save_dir, num_samples=2500):
+def visualize_zero_shot(
+    predictors_dict: Dict[str, nn.Module],
+    data: DataFrame,
+    save_dir: str,
+    num_samples: int = 2500,
+) -> None:
     logger = logging.getLogger("ovg-visualize_zero_shot")
     num_samples_per_dim = int(np.sqrt(num_samples))
     num_samples = num_samples_per_dim**2
