@@ -27,13 +27,14 @@ if __name__ == "__main__":
     # config = _config.get_default()
 
     datagen_settings.num_samples = config.num_samples
-    heavy_tailed = False
+    heavy_tailed = True
 
     seed = 42
     set_seed(42)
 
     results_dir = (
-        Path.cwd() / f'results_ablation_{datetime.now().strftime("%y_%m_%d_%H_%M_%S")}'
+        Path.cwd()
+        / f'results_ablation_w_htail_{datetime.now().strftime("%y_%m_%d_%H_%M_%S")}'
     )
     for k, v in datagen_settings.to_dict().items():
         logger.info(f"{k}:\t{v}")

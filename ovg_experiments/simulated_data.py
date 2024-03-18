@@ -1,3 +1,4 @@
+import ast
 import h5py
 import numpy as np
 from pathlib import Path
@@ -51,8 +52,9 @@ class SimulatedData(object):
     __slots__ = ("data_source", "data_target", "settings")
 
     def __init__(self) -> None:
-        for attr in self.__slots__:
-            setattr(self, attr, None)
+        self.data_source = None
+        self.data_target = None
+        self.settings = None
 
     @classmethod
     def from_file(cls, file_path: Path) -> "SimulatedData":
@@ -69,7 +71,7 @@ class SimulatedData(object):
 
     def to_file(self, file_path: Path, mode="w") -> None:
         logger = logging.getLogger("simulated data")
-        logger.info("saving dataset to {file_path}")
+        logger.info(f"saving dataset to {file_path}")
         save_dict = {attr: getattr(self, attr) for attr in self.__slots__}
         with h5py.File(str(file_path), mode) as f:
             _recursive_hdf5_save(f, save_dict)

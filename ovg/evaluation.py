@@ -35,7 +35,7 @@ def compute_zero_shot_loss(
             losses[name] = (np.square(y_target - y_observed)).mean()
 
     for k, v in losses.items():
-        logger.info(f"loss {k}:\t{v}")
+        logger.info(f"loss {k}:\t{v:.3f}")
     return losses
 
 

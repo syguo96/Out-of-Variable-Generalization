@@ -1,27 +1,92 @@
-from datetime import datetime
-from ovg.predictors import Predictor
-from typing import Optional
-from pathlib import Path
-from typing import Dict
+from typing import Tuple
+import logging
 import random
-from os.path import join
+import sys
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, Iterable, List, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
 import torch
-import yaml
-from ovg.predictors import (
-    ImputedPredictor,
-    MarginalPredictor,
-    OptimalPredictor,
-    ProposedPredictor,
+from ovg.predictors import Predictor
+from ovg_experiments.ablation_common import (
+    PredictorType,
+    SimulatedData,
+    train_predictors,
 )
-
-from ovg_experiments.generate_data import generate_simulated_data, ExperimentType
 from ovg_experiments.datagen_settings import DataGenSettings
-from ovg_experiments.ablation_common import SimulatedData
+from ovg_experiments.generate_data import ExperimentType, generate_simulated_data
+
+
+class ExperimentsResult:
+    # one instance of ExperimentsResult per num samples
+
+    def __init__(self) -> None:
+        self._avg_errors: Dict[PredictorType, List[float]] = {
+            predictor_type: [] for predictor_type in PredictorType
+        }  # one value per seed
+
+    def add(self, predictor_type: PredictorType, avg_error: float):
+        self._avg_errors[predictor_type].append(avg_error)
+
+    def get(self, predictor_type: PredictorType) -> List[float]:
+        return self._avg_errors[predictor_type]
+
+
+def _average_over_experiments(
+    num_samples_validation: Iterable[int],
+    all_results: List[Dict[int, ExperimentsResult]],
+) -> Dict[int, ExperimentsResult]:
+    r: Dict[int, ExperimentsResult] = {}
+    for num_samples in num_samples_validation:
+        experiments_results: List[ExperimentsResult] = [
+            er[num_samples] for er in all_results
+        ]
+        r_ = ExperimentsResult()
+        for predictor_type in PredictorType:
+            all_values = [er._avg_errors[predictor_type] for er in experiments_results]
+            avg_values = [sum(x) / len(x) for x in zip(*all_values)]
+            r_._avg_errors[predictor_type] = avg_values
+        r[num_samples] = r_
+    return r
+
+
+def plot_losses(
+    experiments_results: Dict[int, ExperimentsResult], target_file: Path, show: bool
+) -> None:
+
+    # one line plot per predictory type
+    # x axis: num of samples
+    # y axis: average errors
+
+    for predictor_type in PredictorType:
+        # key: num samples, values: list of average errors
+        results: Dict[int, List[float]] = {
+            num_samples: experiment_results.get(predictor_type)
+            for num_samples, experiment_results in experiments_results.items()
+        }
+        df = pd.DataFrame(results)
+        df = df.melt(var_name="Sample Size")
+        sns.lineplot(
+            data=df,
+            x="Sample Size",
+            y="value",
+            marker="o",
+            label=predictor_type.name,
+            linewidth=3,
+            markersize=8,
+        )
+    plt.axhline(y=0, color="gray", linestyle="--")
+    plt.xscale("log")
+    plt.xlabel("Number of samples")
+    plt.ylabel("Relative Loss")
+    plt.legend()
+    plt.savefig(target_file)
+    if show:
+        plt.show()
 
 
 def _compute_ground_truth_loss(predictor, data_target):
@@ -37,145 +102,173 @@ def _set_all_seeds(seed):
     torch.backends.cudnn.deterministic = True
 
 
-def _experiment(
-    dataset: SimulatedData, ref_predictor, predictor_dict, num_samples_train
-) -> Dict:
-    loss_dict = {}
+def _data_split(dataset: SimulatedData, train_test_split):
+    # returns data_source, data_target_train, data_target_test
     data_target_size = dataset.data_target.shape[0]
     data_target_train, data_target_test = (
-        dataset.data_target.iloc[: int(data_target_size * 0.5), :],
-        dataset.data_target.iloc[int(data_target_size * 0.5) :, :],
+        dataset.data_target.iloc[: int(data_target_size * train_test_split), :],
+        dataset.data_target.iloc[int(data_target_size * train_test_split) :, :],
     )
-    print(data_target_train.shape, data_target_test.shape)
-
-    for name, predictor in predictor_dict.items():
-        predictor.fit(
-            dataset.data_source, data_target_train.iloc[:num_samples_train, :]
-        )
-        loss_dict[name] = _compute_ground_truth_loss(predictor, data_target_test)
-
-    reference_loss_dict = {}
-    for num_samples in NUM_SAMPLES_VALIDATION:
-        ref_predictor.fit(dataset.data_source, data_target_train.iloc[:num_samples, :])
-        reference_loss_dict[num_samples] = _compute_ground_truth_loss(
-            ref_predictor, data_target_test
-        )
-    loss_dict["reference"] = reference_loss_dict
-
-    return loss_dict
+    return dataset.data_source, data_target_train, data_target_test
 
 
-def _run_experiment(
-    experiment: ExperimentType,
+def _run_seed_experiment(
+    seed: int,
+    experiment_type: ExperimentType,
     datagen_settings: DataGenSettings,
-    ref_predictor: Predictor,
-    predictor_dict: Dict[str, Predictor],
+    experiments_results: Dict[int, ExperimentsResult],
+    train_test_split: float,
+    num_samples_train: int,
+    num_samples_validation: Iterable[int],
+) -> SimulatedData:
+
+    _set_all_seeds(seed)
+
+    dataset: SimulatedData = generate_simulated_data(experiment_type, datagen_settings)
+
+    data_source, data_target_train, data_target_test = _data_split(
+        dataset, train_test_split
+    )
+    predictors: Dict[PredictorType, Predictor] = train_predictors(
+        data_source, data_target_train.iloc[:num_samples_train, :]
+    )
+    predictors_loss: Dict[PredictorType, float] = {
+        predictor_type: _compute_ground_truth_loss(predictor, data_target_test)
+        for predictor_type, predictor in predictors.items()
+    }
+
+    reference_predictor: Predictor = predictors[PredictorType.oracle]
+    for num_samples in num_samples_validation:
+        reference_predictor.fit(data_source, data_target_train.iloc[:num_samples, :])
+        loss = _compute_ground_truth_loss(reference_predictor, data_target_test)
+        for predictor_type, predictor_loss in predictors_loss.items():
+            experiments_results[num_samples].add(
+                predictor_type, np.log(predictor_loss / loss)
+            )
+
+    return dataset
+
+
+def _run_experiment_type(
+    experiment_type: ExperimentType,
+    datagen_settings: DataGenSettings,
     num_samples_train: int,
     num_seeds: int,
+    num_samples_validation: Iterable[int],
     dataset_save: Optional[Path] = None,
-) -> Dict:
+    train_test_split: float = 0.5,
+) -> Dict[int, ExperimentsResult]:
 
-    loss_dict = {seed: {} for seed in range(num_seeds)}
+    logger = logging.getLogger("quant-studies")
+
+    # key: number of samples for validation
+    # value: instance of ExperimentsResult, which will save
+    #   on result (average error) per predictory type and per seed
+    experiments_results: Dict[int, ExperimentsResult] = {
+        num_samples_valid: ExperimentsResult()
+        for num_samples_valid in num_samples_validation
+    }
     for seed in range(num_seeds):
-        _set_all_seeds(seed)
-        dataset: SimulatedData = generate_simulated_data(experiment, datagen_settings)
-
+        logger.info(
+            f"running for experiment type {experiment_type.name} and seed {seed}"
+        )
+        # dataset returned only for the sake of saving it
+        dataset = _run_seed_experiment(
+            seed,
+            experiment_type,
+            datagen_settings,
+            experiments_results,
+            train_test_split,
+            num_samples_train,
+            num_samples_validation,
+        )
         if dataset_save:
             dataset.to_file(dataset_save / f"data_{seed}.hdf5")
+    return experiments_results
 
-        loss_dict[seed] = _experiment(
-            datagen_settings, ref_predictor, predictor_dict, num_samples_train
+
+def _run_experiments(
+    results_dir: Path,
+    experiment_types: Iterable[ExperimentType],
+    datagen_settings: DataGenSettings,
+    num_samples_train: int,
+    num_seeds: int,
+    num_samples_validation: Iterable[int],
+    train_test_split: float = 0.5,
+    show: bool = True,
+):
+    # for each experiment type (e.g. 'non linear', 'polynomial')
+    # running len(num_samples_validation) * num_seeds experiments.
+
+    all_results: List[  # list: one item per experiment type
+        # dict:
+        #  - key: num samples
+        #  - values: list of average errors (one per seed) for each predictor
+        #      (as instances of ExperimentsResult)
+        Dict[int, ExperimentsResult]
+    ] = []
+
+    for experiment_type in experiment_types:
+        experiments_results: Dict[int, ExperimentsResult] = _run_experiment_type(
+            experiment_type,
+            datagen_settings,
+            num_samples_train,
+            num_seeds,
+            num_samples_validation,
+            results_dir,
+            train_test_split,
         )
+        target_file = results_dir / experiment_type.name / "quantitative_comparison.pdf"
+        target_file.parent.mkdir()
+        plot_losses(experiments_results, target_file, show)
+        all_results.append(experiments_results)
 
-    return loss_dict
-
-
-def plot_losses(plot_dict, target_dir: Path):
-    if not target_dir.is_dir():
-        target_dir.mkdir(parents=True)
-    for predictor in plot_dict.keys():
-        df = pd.DataFrame(plot_dict[predictor])
-        df = df.melt(var_name="Sample Size")
-        sns.lineplot(
-            data=df,
-            x="Sample Size",
-            y="value",
-            marker="o",
-            label=predictor,
-            linewidth=3,
-            markersize=8,
-        )
-
-    plt.axhline(y=0, color="gray", linestyle="--")
-    plt.xscale("log")
-    plt.xlabel("Number of samples")
-    plt.ylabel("Relative Loss")
-    plt.legend()
-    plt.savefig(target_dir / "quant_comparison.pdf")
-    plt.show()
+    # averaging over all experiment types
+    average_results: Dict[int, ExperimentsResult] = _average_over_experiments(
+        num_samples_validation, all_results
+    )
+    target_file = results_dir / "quantitative_comparison.pdf"
+    plot_losses(average_results, target_file, show)
 
 
 if __name__ == "__main__":
-    NUM_SAMPLES_VALIDATION = [10, 100, 200, 500, 1000, 2000, 5000]
-    EXPERIMENT_BASE_DIR = "experiments/"  # "../OOV/experiments/"
-    NUM_SEEDS = 5
-    NUM_SAMPLES_TRAIN = 50
+
+    logging.basicConfig(
+        level=logging.INFO,
+        handlers=[logging.StreamHandler(sys.stdout)],
+    )
+    logger = logging.getLogger("quant-studies")
+
+    num_samples_validation: Tuple[int, ...] = (10, 100, 200, 500, 1000, 2000, 5000)
+    num_seeds = 5
+    num_samples_train = 50
+    datagen_settings = DataGenSettings.get_default()
+    experiment_types = (ExperimentType.nonlinear, ExperimentType.polynomial)
+    train_test_split = 0.5
+    show = True
+
+    test = True
+    if test:
+        num_seeds = 2
+        num_samples_train = 10
+        num_samples_validation = (10, 100)
+        datagen_settings.num_samples = 200
 
     results_dir = (
         Path.cwd()
         / f'results_quantitative_results_{datetime.now().strftime("%y_%m_%d_%H_%M_%S")}'
     )
+    results_dir.mkdir(parents=True)
 
-    reference_predictor = OptimalPredictor()
-    predictor_dict = {
-        "Proposed": ProposedPredictor(),
-        "Marginal": MarginalPredictor(),
-        "MeanImputed": ImputedPredictor(),
-    }
+    _run_experiments(
+        results_dir,
+        experiment_types,
+        datagen_settings,
+        num_samples_train,
+        num_seeds,
+        num_samples_validation,
+        train_test_split,
+        show,
+    )
 
-    datagen_settings = DataGenSettings.get_default()
-
-    plot_dict = {
-        pred: {
-            num_samples: {seed: [] for seed in range(NUM_SEEDS)}
-            for num_samples in NUM_SAMPLES_VALIDATION
-        }
-        for pred in predictor_dict.keys()
-    }
-    for experiment_type in (ExperimentType.nonlinear, ExperimentType.polynomial):
-        exp_loss_dict = _run_experiment(
-            experiment_type,
-            datagen_settings,
-            reference_predictor,
-            predictor_dict,
-            NUM_SAMPLES_TRAIN,
-            NUM_SEEDS,
-            dataset_save=results_dir / f"data_{experiment_type}.hdf5",
-        )
-        exp_plot_dict = {
-            pred: {num_samples: [] for num_samples in NUM_SAMPLES_VALIDATION}
-            for pred in predictor_dict.keys()
-        }
-        for pred in plot_dict.keys():
-            for num_samples in NUM_SAMPLES_VALIDATION:
-                for seed in range(NUM_SEEDS):
-                    avg_error = np.log(
-                        exp_loss_dict[seed][pred]
-                        / exp_loss_dict[seed]["reference"][num_samples]
-                    )
-                    plot_dict[pred][num_samples][seed].append(avg_error)
-                    exp_plot_dict[pred][num_samples].append(avg_error)
-
-        plot_losses(exp_plot_dict, results_dir / experiment_type.name)
-
-    mean_dict = {
-        pred: {num_samples: [] for num_samples in NUM_SAMPLES_VALIDATION}
-        for pred in predictor_dict.keys()
-    }
-    for pred in predictor_dict.keys():
-        for num_samples in NUM_SAMPLES_VALIDATION:
-            for seed in range(NUM_SEEDS):
-                mean_dict[pred][num_samples].append(
-                    np.mean(plot_dict[pred][num_samples][seed])
-                )
-    plot_losses(mean_dict, results_dir)
+    logger.info(f"saved results in {results_dir}")

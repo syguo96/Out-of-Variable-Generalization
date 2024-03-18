@@ -19,46 +19,6 @@ from ovg_experiments.ablation_common import (
 from ovg_experiments.datagen_settings import DataGenSettings
 
 
-def _calculate_mean_summary_table(summary_noises, modes, noises, predictors, levels):
-    mean_table = {
-        str(n): {
-            mode: {
-                level: {predictor: {"mean": [], "std": []} for predictor in predictors}
-                for level in levels
-            }
-            for mode in modes
-        }
-        for n in noises
-    }
-    perc_increase_table = {
-        str(n): {
-            mode: {
-                level: {predictor: {"perc": []} for predictor in predictors}
-                for level in levels
-            }
-            for mode in modes
-        }
-        for n in noises
-    }
-    for n in noises:
-        for mode in modes:
-            for key in summary_noises[str(n)][mode].keys():
-                for predictor in predictors:
-                    mean = np.mean(summary_noises[str(n)][mode][key][predictor])
-                    std = np.std(summary_noises[str(n)][mode][key][predictor])
-                    mean_table[str(n)][mode][key][predictor]["mean"] = mean
-                    mean_table[str(n)][mode][key][predictor]["std"] = std
-                for predictor in predictors:
-                    oracle_mean = mean_table[str(n)][mode][key]["oracle"]["mean"]
-                    cur_mean = mean_table[str(n)][mode][key][predictor]["mean"]
-                    perc_increase_table[str(n)][mode][key][predictor]["perc"] = (
-                        cur_mean - oracle_mean
-                    ) / oracle_mean
-    print("mean_table", mean_table)
-
-    return mean_table, perc_increase_table
-
-
 def _main(noises, num_runs: int, lr: float, hidden_size: int, epoch: int) -> None:
     results = {
         str(noise): {mode: AblationStudyResults for mode in Mode} for noise in noises
@@ -81,7 +41,8 @@ def _main(noises, num_runs: int, lr: float, hidden_size: int, epoch: int) -> Non
                 "noise": noise,
                 "mode": mode.name,
             }
-            logger.info("\n" + pprint.pformat(config_))
+            for k, v in config_.items():
+                logger.info(f"{k}:\t{v}")
             logger.info("\nresults:\n" + format_summary(result.summary_dict()))
             results[str(noise)][mode] = result
 
@@ -93,7 +54,7 @@ def _main(noises, num_runs: int, lr: float, hidden_size: int, epoch: int) -> Non
 
     mean_table = {
         str(noise): {
-            mode: results[str(noise)][mode].summary_noises(with_perc=True)
+            mode: results[str(noise)][mode].summary_dict(with_perc=True)
             for mode in Mode
         }
         for noise in noises
@@ -114,6 +75,7 @@ if __name__ == "__main__":
         Path.cwd()
         / f'results_ablation_with_noise_{datetime.now().strftime("%y_%m_%d_%H_%M_%S")}'
     )
+    results_dir.mkdir(parents=True)
 
     seed = 42
     num_runs = 5
@@ -122,6 +84,7 @@ if __name__ == "__main__":
     epochs = 50
     noises = [0.01, 0.2, 0.4, 0.6, 0.8, 1]
     datagen_settings = DataGenSettings.get_default()
+    datagen_settings.num_samples = 10000
 
     set_seed(seed)
     _main(noises, num_runs, lr, hidden_size, epochs)

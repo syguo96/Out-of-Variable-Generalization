@@ -1,3 +1,6 @@
+from ovg.predictors import Predictor
+from typing import Optional
+from itertools import product
 from tabulate import tabulate
 from typing import List
 from typing import Iterable
@@ -141,8 +144,9 @@ def ablation_simulated_data_generation(
     level: Level,
     mode: Mode,
     noise=0.1,
-    is_heavy_tailed=False,
+    with_heavy_tailed=False,
 ) -> SimulatedData:
+
     logger = logging.getLogger("ablation-data-generation")
 
     num_samples = datagen_settings.num_samples
@@ -182,7 +186,7 @@ def ablation_simulated_data_generation(
     logger.info(f"std of y without noise {np.std(y)}")
     logger.info(f"current noise level {noise}")
 
-    if is_heavy_tailed:
+    if with_heavy_tailed:
         noise = np.random.lognormal(0, 0.5, (num_samples,))
     else:
         noise = np.random.normal(0, noise, (num_samples,))
@@ -216,41 +220,26 @@ def ablation_simulated_data_generation(
     return dataset
 
 
-def _run_ablation_experiment(
-    dataset, lr=0.01, hidden_size=64, num_epochs=50
-) -> Dict[PredictorType, float]:
-
-    reference_predictor = OptimalPredictor()
-    proposed_predictor = ProposedPredictor(
-        lr=lr, hidden_size=hidden_size, num_epochs=num_epochs
-    )
-    marginal_predictor = MarginalPredictor()
-    imputation_predictor = ImputedPredictor()
-
-    for pred in [
-        reference_predictor,
-        proposed_predictor,
-        marginal_predictor,
-        imputation_predictor,
-    ]:
-        pred.fit(dataset.data_source, dataset.data_target)
+def train_predictors(
+    data_source,
+    data_train,
+    lr=0.01,
+    hidden_size=64,
+    num_epochs=50,
+) -> Dict[PredictorType, Predictor]:
 
     predictors_dict = {
-        PredictorType.proposed: proposed_predictor,
-        PredictorType.oracle: reference_predictor,
-        PredictorType.marginal: marginal_predictor,
-        PredictorType.imputation: imputation_predictor,
+        PredictorType.proposed: ProposedPredictor(
+            lr=lr, hidden_size=hidden_size, num_epochs=num_epochs
+        ),
+        PredictorType.oracle: OptimalPredictor(),
+        PredictorType.marginal: MarginalPredictor(),
+        PredictorType.imputation: ImputedPredictor(),
     }
+    for pred in predictors_dict.values():
+        pred.fit(data_source, data_train)
 
-    loss = compute_zero_shot_loss(
-        reference_predictor,
-        predictors_dict,
-        dataset.data_target,
-        num_samples=1000,
-        systematic=True,
-    )
-
-    return loss
+    return predictors_dict
 
 
 class AblationStudyResults:
@@ -334,7 +323,7 @@ def format_summary(summary):
     headers = ["Level", "Method", "Mean", "Std"]
     for level, methods in summary.items():
         for method, stats in methods.items():
-            row = [level, method] + stats["mean"] + stats["std"]
+            row = [level, method, stats["mean"], stats["std"]]
             table_data.append(row)
     return tabulate(table_data, headers=headers)
 
@@ -347,17 +336,70 @@ def ablation_studies(
     hidden_size,
     epoch,
     noise=0.1,
+    with_heavy_tailed=False,
+    loss_num_samples: int = 1000,
+    loss_systematic: bool = True,
 ) -> AblationStudyResults:
     results = AblationStudyResults()
     for run in range(num_runs):
         for level in (Level.level0, Level.level1, Level.level2):
             dataset = ablation_simulated_data_generation(
-                data_generation_settings, level, mode, noise=noise
+                data_generation_settings,
+                level,
+                mode,
+                noise=noise,
+                with_heavy_tailed=with_heavy_tailed,
             )
-            loss = _run_ablation_experiment(
-                dataset, lr=lr, hidden_size=hidden_size, num_epochs=epoch
+            predictors_dict = train_predictors(
+                dataset.data_source,
+                dataset.data_target,
+                lr=lr,
+                hidden_size=hidden_size,
+                num_epochs=epoch,
+            )
+            loss = compute_zero_shot_loss(
+                predictors_dict[PredictorType.oracle],
+                predictors_dict,
+                dataset.data_target,
+                num_samples=loss_num_samples,
+                systematic=loss_systematic,
             )
             for predictor_type, loss_value in loss.items():
                 results.add_loss(level, predictor_type, loss_value)
 
     return results
+
+
+def ablation_experiment(
+    result_dir: Path,
+    data_generation_settings: DataGenSettings,
+    num_runs,  # 5
+    lrs,
+    hidden_sizes,
+    epochs,
+    with_heavy_tailed: bool,
+) -> None:
+    logger = logging.getLogger("ablation-studies")
+    result_dir.mkdir(parents=True)
+
+    mode_results: Dict[Mode, List[AblationStudyResults]] = {mode: [] for mode in Mode}
+
+    for mode in (Mode.linear, Mode.general):
+        for lr, hidden_size, epoch in product(lrs, hidden_sizes, epochs):
+            r: AblationStudyResults = ablation_studies(
+                data_generation_settings,
+                mode,
+                num_runs,
+                lr,
+                hidden_size,
+                epoch,
+                with_heavy_tailed=with_heavy_tailed,
+            )
+            mode_results[mode].append(r)
+
+    for mode, results in mode_results.items():
+        summary = get_summary(results)
+        np.save(result_dir / f"mean_{mode.name}.npy", summary)
+        logger.info(f"\n-- results for {mode.name} --\n" + format_summary(summary))
+
+    logger.info(f"results saved in {result_dir}")
