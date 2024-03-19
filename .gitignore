@@ -6,3 +6,4 @@
 *~
 mypy.ini
 *mypy_cache
+*flycheck_*

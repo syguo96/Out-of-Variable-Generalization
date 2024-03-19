@@ -1,3 +1,4 @@
+from numpy.typing import ArrayLike
 import ast
 import logging
 from enum import Enum
@@ -16,7 +17,7 @@ class ExperimentType(Enum):
     trigonometric = 2
 
 
-def scale_max_min(x):
+def scale_max_min(x: ArrayLike) -> ArrayLike:
     return 5 * (x - np.min(x)) / (np.max(x) - np.min(x))
 
 
@@ -70,7 +71,14 @@ class DataGenSettings:
         "noise_mean",
     )
 
-    def __init__(self, num_samples, split_fraction, noise_var, noise_skew, noise_mean):
+    def __init__(
+        self,
+        num_samples: int = 10000,
+        split_fraction: float = 0.9,
+        noise_var: float = 0.1,
+        noise_skew: float = 0.0,
+        noise_mean: float = 0.0,
+    ) -> None:
         self.num_samples = num_samples
         self.split_fraction = split_fraction
         self.noise_var = noise_var
@@ -81,13 +89,16 @@ class DataGenSettings:
         return {attr: getattr(self, attr) for attr in self.__slots__}
 
     @classmethod
-    def get_default(cls):
-        num_samples = 100000
-        split_fraction = 0.9
-        noise_var = 0.1
-        noise_skew = 0
-        noise_mean = 0
-        return cls(num_samples, split_fraction, noise_var, noise_skew, noise_mean)
+    def from_dict(cls, d: Dict[str, Any]) -> "DataGenSettings":
+        instance = cls()
+        for k, v in d.items():
+            if not hasattr(instance, k):
+                raise ValueError(
+                    f"AblationStudyConfig: cannot set a value for {k} "
+                    "(no such attribute)"
+                )
+            setattr(instance, k, v)
+        return instance
 
 
 class SimulatedData(object):
@@ -139,7 +150,7 @@ class SimulatedData(object):
 
 
 def _y_polynomial(x, coeff):
-    x_1, x_2, x_3 = x[:, 0], x[:, 1], x[:, 2]
+    x_1, x_2, x_3 = x[:, 0], x[:, 1], x[:, 2]  # type: ignore
     polynomial_features = np.array(
         [x_1, x_2, x_3, x_1 * x_2, x_1 * x_3, x_2 * x_3, x_1 * x_2 * x_3]
     )

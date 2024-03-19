@@ -1,3 +1,4 @@
+from typing import Any
 import logging
 import os
 import random
@@ -47,7 +48,16 @@ class Level(Enum):
 
 
 class AblationStudyConfig:
-    def __init__(self, num_samples, lrs, hidden_sizes, epochs, num_runs, noises, modes):
+    def __init__(
+        self,
+        num_samples: int = 1000,
+        lrs: Iterable[float] = (0.01,),
+        hidden_sizes: Iterable[int] = (64,),
+        epochs: Iterable[int] = (50,),
+        num_runs: int = 5,
+        noises: Iterable[float] = (0.01, 0.2, 0.4, 0.6, 0.8, 1),
+        modes: Iterable[Mode] = (Mode.linear,),
+    ):
         self.num_samples = num_samples
         self.lrs = lrs
         self.hidden_sizes = hidden_sizes
@@ -57,29 +67,16 @@ class AblationStudyConfig:
         self.modes = modes
 
     @classmethod
-    def get_default(cls):
-        num_samples = 10000
-        lrs = (0.01,)
-        hidden_sizes = (64,)
-        epochs = (50,)
-        num_runs = 5
-        noises = (0.01, 0.2, 0.4, 0.6, 0.8, 1)
-        modes = (Mode.linear,)
-        return cls(num_samples, lrs, hidden_sizes, epochs, num_runs, noises, modes)
-
-    @classmethod
-    def get_testing(cls):
-        num_samples = 25
-        lrs = (0.01,)
-        hidden_sizes = (8,)
-        epochs = (10,)
-        num_runs = 2
-        noises = (
-            0.01,
-            0.2,
-        )
-        modes = (Mode.linear,)
-        return cls(num_samples, lrs, hidden_sizes, epochs, num_runs, noises, modes)
+    def from_dict(cls, d: Dict[str, Any]) -> "AblationStudyConfig":
+        instance = cls()
+        for k, v in d.items():
+            if not hasattr(instance, k):
+                raise ValueError(
+                    f"AblationStudyConfig: cannot set a value for {k} "
+                    "(no such attribute)"
+                )
+            setattr(instance, k, v)
+        return instance
 
 
 def set_seed(seed: int) -> None:
@@ -196,11 +193,11 @@ def ablation_simulated_data_generation(
 
 
 def train_predictors(
-    data_source,
-    data_train,
-    lr=0.01,
-    hidden_size=64,
-    num_epochs=50,
+    data_source: pd.DataFrame,
+    data_train: pd.DataFrame,
+    lr: float = 0.01,
+    hidden_size: int = 64,
+    num_epochs: int = 50,
 ) -> Dict[PredictorType, Predictor]:
 
     predictors_dict = {
@@ -224,7 +221,7 @@ class AblationStudyResults:
             level: {pred_type: [] for pred_type in PredictorType} for level in Level
         }
 
-    def raw(self):
+    def raw(self) -> Dict[Level, Dict[PredictorType, List[float]]]:
         return self._results
 
     def add_loss(
@@ -241,7 +238,9 @@ class AblationStudyResults:
     def get_std(self, level: Level, predictor_type: PredictorType):
         return np.std(self.get_losses(level, predictor_type))
 
-    def summary_dict(self, with_perc: bool = False):
+    def summary_dict(
+        self, with_perc: bool = False
+    ) -> Dict[Level, Dict[PredictorType, Dict[str, float]]]:
         r = {
             level: {
                 pred_type: {
@@ -260,7 +259,7 @@ class AblationStudyResults:
                 mean = r[level][pred_type]["mean"]
                 increase = (mean - oracle_mean) / oracle_mean
                 r[level][pred_type]["perc"] = increase
-        return
+        return r
 
     def save(self, target_dir: Path) -> None:
         target_dir.mkdir(exist_ok=True, parents=True)
@@ -280,7 +279,9 @@ def _get_stds(
     return [r.get_std(level, predictor_type) for r in results]
 
 
-def get_summary(results: Iterable[AblationStudyResults]):
+def get_summary(
+    results: Iterable[AblationStudyResults],
+) -> Dict[Level, Dict[PredictorType, Dict[str, List[float]]]]:
     return {
         level: {
             pred_type: {
@@ -293,7 +294,9 @@ def get_summary(results: Iterable[AblationStudyResults]):
     }
 
 
-def format_summary(summary):
+def format_summary(
+    summary: Dict[Level, Dict[PredictorType, Dict[str, List[float]]]]
+) -> str:
     table_data = []
     headers = ["Level", "Method", "Mean", "Std"]
     for level, methods in summary.items():
@@ -307,11 +310,11 @@ def ablation_studies(
     data_generation_settings: DataGenSettings,
     mode: Mode,
     num_runs: int,
-    lr,
-    hidden_size,
-    epoch,
-    noise=0.1,
-    with_heavy_tailed=False,
+    lr: float,
+    hidden_size: int,
+    epoch: int,
+    noise: float = 0.1,
+    with_heavy_tailed: bool = False,
     loss_num_samples: int = 1000,
     loss_systematic: bool = True,
 ) -> AblationStudyResults:
@@ -348,10 +351,10 @@ def ablation_studies(
 def ablation_experiment(
     result_dir: Path,
     data_generation_settings: DataGenSettings,
-    num_runs,  # 5
-    lrs,
-    hidden_sizes,
-    epochs,
+    num_runs: int,
+    lrs: Iterable[float],
+    hidden_sizes: Iterable[int],
+    epochs: Iterable[int],
     with_heavy_tailed: bool,
 ) -> None:
     logger = logging.getLogger("ablation-studies")

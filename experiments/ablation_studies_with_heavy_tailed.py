@@ -10,7 +10,7 @@ from ovg_experiments.ablation_common import (
     set_seed,
 )
 
-from ovg_experiments.datagen_settings import DataGenSettings
+from ovg_experiments.simulated_data import DataGenSettings
 
 
 if __name__ == "__main__":
@@ -21,16 +21,23 @@ if __name__ == "__main__":
     )
     logger = logging.getLogger("ablation-studies")
 
-    datagen_settings = DataGenSettings.get_default()
-
-    config = AblationStudyConfig.get_testing()
-    # config = _config.get_default()
-
-    datagen_settings.num_samples = config.num_samples
     heavy_tailed = True
-
     seed = 42
-    set_seed(42)
+    datagen_settings = DataGenSettings(
+        num_samples=10000,
+        split_fraction=0.9,
+        noise_var=0.1,
+        noise_skew=0.0,
+        noise_mean=0.0,
+    )
+    config = AblationStudyConfig.from_dict(
+        {
+            "lrs": (0.01, 0.001),
+            "hidden_sizes": (64, 32),
+            "epochs": (30, 50),
+            "num_runs": 5,
+        }
+    )
 
     results_dir = (
         Path.cwd()
@@ -44,6 +51,7 @@ if __name__ == "__main__":
     logger.info(f"epochs:\t{config.epochs}")
     logger.info(f"result directory:\t{results_dir}")
 
+    set_seed(seed)
     ablation_experiment(
         results_dir,
         datagen_settings,

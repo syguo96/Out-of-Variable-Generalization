@@ -1,3 +1,4 @@
+from numpy.typing import ArrayLike
 from typing import Tuple
 import logging
 import random
@@ -17,8 +18,8 @@ from ovg_experiments.ablation_common import (
     SimulatedData,
     train_predictors,
 )
-from ovg_experiments.datagen_settings import DataGenSettings
-from ovg_experiments.generate_data import ExperimentType, generate_simulated_data
+from ovg_experiments.simulated_data import DataGenSettings
+from ovg_experiments.simulated_data import ExperimentType, generate_simulated_data
 
 
 class ExperimentsResult:
@@ -29,7 +30,7 @@ class ExperimentsResult:
             predictor_type: [] for predictor_type in PredictorType
         }  # one value per seed
 
-    def add(self, predictor_type: PredictorType, avg_error: float):
+    def add(self, predictor_type: PredictorType, avg_error: float) -> None:
         self._avg_errors[predictor_type].append(avg_error)
 
     def get(self, predictor_type: PredictorType) -> List[float]:
@@ -89,12 +90,12 @@ def plot_losses(
         plt.show()
 
 
-def _compute_ground_truth_loss(predictor, data_target):
+def _compute_ground_truth_loss(predictor: Predictor, data_target: pd.DataFrame):
     y_target = predictor(data_target)
     return (np.square(y_target - data_target["Y"])).mean()
 
 
-def _set_all_seeds(seed):
+def _set_all_seeds(seed: int) -> None:
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -102,7 +103,9 @@ def _set_all_seeds(seed):
     torch.backends.cudnn.deterministic = True
 
 
-def _data_split(dataset: SimulatedData, train_test_split):
+def _data_split(
+    dataset: SimulatedData, train_test_split: float
+) -> Tuple[ArrayLike, ArrayLike, ArrayLike]:
     # returns data_source, data_target_train, data_target_test
     data_target_size = dataset.data_target.shape[0]
     data_target_train, data_target_test = (
@@ -239,20 +242,19 @@ if __name__ == "__main__":
     )
     logger = logging.getLogger("quant-studies")
 
+    datagen_settings = DataGenSettings(
+        num_samples=10000,
+        split_fraction=0.9,
+        noise_var=0.1,
+        noise_skew=0.0,
+        noise_mean=0.0,
+    )
     num_samples_validation: Tuple[int, ...] = (10, 100, 200, 500, 1000, 2000, 5000)
     num_seeds = 5
     num_samples_train = 50
-    datagen_settings = DataGenSettings.get_default()
     experiment_types = (ExperimentType.nonlinear, ExperimentType.polynomial)
     train_test_split = 0.5
-    show = True
-
-    test = True
-    if test:
-        num_seeds = 2
-        num_samples_train = 10
-        num_samples_validation = (10, 100)
-        datagen_settings.num_samples = 200
+    show_plots = True
 
     results_dir = (
         Path.cwd()
@@ -268,7 +270,7 @@ if __name__ == "__main__":
         num_seeds,
         num_samples_validation,
         train_test_split,
-        show,
+        show_plots,
     )
 
     logger.info(f"saved results in {results_dir}")
