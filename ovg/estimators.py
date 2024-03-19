@@ -1,18 +1,17 @@
+import logging
+from typing import Optional, Tuple
+
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
-from torch.utils.data import DataLoader
-import logging
-from typing import Tuple, Optional
-
 # For typing hints related to numpy arrays
 from numpy.typing import ArrayLike
-
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 # For typing hints related to PyTorch tensors and data types
 from torch import Tensor
+from torch.utils.data import DataLoader
 
 
 class Dataset(torch.utils.data.Dataset):

@@ -1,22 +1,17 @@
 import logging
 import random
 import sys
+from typing import Dict, List
 
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 import torch
 from ovg.evaluation import compute_zero_shot_loss
-from ovg.predictors import (
-    ImputedPredictor,
-    MarginalPredictor,
-    OptimalPredictor,
-    ProposedPredictor,
-    PredictorType,
-)
+from ovg.predictors import (ImputedPredictor, MarginalPredictor,
+                            OptimalPredictor, PredictorType, ProposedPredictor)
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-from typing import Dict, List
 
 
 def _set_all_seeds(seed: int) -> None:

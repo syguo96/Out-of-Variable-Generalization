@@ -1,7 +1,9 @@
-import matplotlib.pyplot as plt
-import seaborn as sns
 import os
 from os.path import join
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+
 
 def plot_varying(varying_elements, results_proposed, results_marginal, base_dir, experiment, mode, varying_range):
     """ Plots the ROC curve for a given true positive and false positive rate.

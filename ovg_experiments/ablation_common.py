@@ -1,24 +1,18 @@
-from typing import Any
 import logging
 import os
 import random
 from enum import Enum
 from itertools import product
 from pathlib import Path
-from typing import Dict, Iterable, List
+from typing import Any, Dict, Iterable, List
 
 import numpy as np
 import pandas as pd
 import torch
 from ovg.evaluation import compute_zero_shot_loss
-from ovg.predictors import (
-    Predictor,
-    ImputedPredictor,
-    MarginalPredictor,
-    OptimalPredictor,
-    ProposedPredictor,
-    PredictorType,
-)
+from ovg.predictors import (ImputedPredictor, MarginalPredictor,
+                            OptimalPredictor, Predictor, PredictorType,
+                            ProposedPredictor)
 from tabulate import tabulate
 
 from .simulated_data import DataGenSettings, SimulatedData, scale_max_min

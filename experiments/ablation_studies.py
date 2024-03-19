@@ -1,17 +1,11 @@
 import logging
 import sys
 from datetime import datetime
-
 from pathlib import Path
 
-from ovg_experiments.ablation_common import (
-    ablation_experiment,
-    AblationStudyConfig,
-    set_seed,
-)
-
+from ovg_experiments.ablation_common import (AblationStudyConfig,
+                                             ablation_experiment, set_seed)
 from ovg_experiments.simulated_data import DataGenSettings
-
 
 if __name__ == "__main__":
 

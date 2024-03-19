@@ -2,18 +2,13 @@ import logging
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Dict, Iterable
 
 import numpy as np
-from ovg_experiments.ablation_common import (
-    AblationStudyResults,
-    Mode,
-    ablation_studies,
-    set_seed,
-    format_summary,
-)
+from ovg_experiments.ablation_common import (AblationStudyResults, Mode,
+                                             ablation_studies, format_summary,
+                                             set_seed)
 from ovg_experiments.simulated_data import DataGenSettings
-
-from typing import Dict, Iterable
 
 
 def _main(

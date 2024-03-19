@@ -1,13 +1,14 @@
-from typing import Type
+import logging
 from os.path import join
-from typing import Dict
-from .predictors import Predictor, PredictorType
+from typing import Dict, Type
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import logging
-from pandas.core.frame import DataFrame
 import torch.nn as nn
+from pandas.core.frame import DataFrame
+
+from .predictors import Predictor, PredictorType
 
 plt.rcParams.update(
     {
