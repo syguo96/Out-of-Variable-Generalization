@@ -27,11 +27,11 @@ P(X_1, X_2, ... , X_n) = \prod_i P(X_i | PA_i)
 ![alt text](./images/figure1.png)
 
 Consider an SCM with additive noise $`Y:= \phi(X_1, X_2, X_3) + \epsilon`$ with jointly independent causes and normal noise. 
-Assume that we do not have access to an environment jointly containing all variables `X_1, X_2, X_3, Y`. Instead, we have
-a source environment with jointly observed `X_1, X_2, Y`, and a target environment with jointly observed `X_2, X_3`, and unobserved `Y`.
-The goal is to predict `Y` given `X_2, X_3`.
+Assume that we do not have access to an environment jointly containing all variables $`X_1, X_2, X_3, Y`$. Instead, we have
+a source environment with jointly observed $`X_1, X_2, Y`$, and a target environment with jointly observed $`X_2, X_3`$, and unobserved $`Y`$.
+The goal is to predict $`Y`$ given $`X_2, X_3`$.
 
-**Intuition** We recover the relationship between `Y` and `X_3` thorugh noticing `X_3` though unobserved in the source is a generating factor of `Y`.
+**Intuition** We recover the relationship between $`Y`$ and $`X_3`$ through noticing $`X_3`$ through unobserved in the source is a generating factor of $`Y`$.
 Its information is not contained in the marginalized mean but also in the residual distribution of the error after fitting a discriminative model. 
 Thus by modelling the residual distribution from the source environment, we devise an algorithm to perform out-of-variable prediction in the target environment. 
 
