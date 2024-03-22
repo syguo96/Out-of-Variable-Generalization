@@ -41,11 +41,8 @@ Thus by modelling the residual distribution from the source environment, we devi
 
 ## How to run the code
 
-**Dependencies**
-1. Create a python 3.6+ environment 
-2. Run `pip install -r requirements.txt` 
+After installing the package (`pip install .`), the experiments folder:
 
-### Experiments
 * Get the contour plots in Fig 1 (b) - (e)
 
    `zero_shot_learning.ipynb`
