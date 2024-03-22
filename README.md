@@ -12,10 +12,12 @@ measuring proper subsets of variables at any given time.
 ### Toy Example
 Suppose we aim to recover the joint distribution 
 
-$$P(X_1, X_2, ... , X_n)$$
-
+```math
+P(X_1, X_2, ... , X_n)
+```
 Instead of observing all the variables at the same time, `X_1, X_2, ..., X_n`, 
 it is sufficient if we know the Markov Factorization, we observe `X_i, PA_i`in i-th environment. 
+
 ```math
 P(X_1, X_2, ... , X_n) = \prod_i P(X_i | PA_i)
 ```
@@ -24,7 +26,7 @@ P(X_1, X_2, ... , X_n) = \prod_i P(X_i | PA_i)
 
 ![alt text](./images/figure1.png)
 
-Consider an SCM with additive noise `Y:= \phi(X_1, X_2, X_3) + \epsilon` with jointly independent causes and normal noise. 
+Consider an SCM with additive noise $`Y:= \phi(X_1, X_2, X_3) + \epsilon`$ with jointly independent causes and normal noise. 
 Assume that we do not have access to an environment jointly containing all variables `X_1, X_2, X_3, Y`. Instead, we have
 a source environment with jointly observed `X_1, X_2, Y`, and a target environment with jointly observed `X_2, X_3`, and unobserved `Y`.
 The goal is to predict `Y` given `X_2, X_3`.
