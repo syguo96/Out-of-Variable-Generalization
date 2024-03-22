@@ -5,15 +5,15 @@ This code contains the official implementation of
 Siyuan Guo, Jonas Wildberger, Bernhard Schölkopf - [Out-of-Variable Generalization for Discriminative Models](https://arxiv.org/abs/2304.07896)
 
 This work highlights the efficiency to not observe joint variables for target inference task.
-In practice, to measure and observe all variables are difficult and costly. 
+In practice, to measure and observe all variables is difficult and costly. 
 This is akin to the process of animate learning: we, too, explore Nature by probing, observing, and
 measuring proper subsets of variables at any given time.
 
 ### Toy Example
 Suppose we aim to recover the joint distribution 
-```math
-P(X_1, X_2, ... , X_n)
-```
+
+$$P(X_1, X_2, ... , X_n)$$
+
 Instead of observing all the variables at the same time, `X_1, X_2, ..., X_n`, 
 it is sufficient if we know the Markov Factorization, we observe `X_i, PA_i`in i-th environment. 
 ```math
