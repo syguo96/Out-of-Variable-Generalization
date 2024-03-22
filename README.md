@@ -15,8 +15,8 @@ Suppose we aim to recover the joint distribution
 ```math
 P(X_1, X_2, ... , X_n)
 ```
-Instead of observing all the variables at the same time, `X_1, X_2, ..., X_n`, 
-it is sufficient if we know the Markov Factorization, we observe `X_i, PA_i`in i-th environment. 
+Instead of observing all the variables at the same time, $`X_1, X_2, ..., X_n`$, 
+it is sufficient if we know the Markov Factorization, we observe $`X_i, PA_i`$ in i-th environment. 
 
 ```math
 P(X_1, X_2, ... , X_n) = \prod_i P(X_i | PA_i)
