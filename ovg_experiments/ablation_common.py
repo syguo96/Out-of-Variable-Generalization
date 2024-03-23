@@ -356,7 +356,7 @@ def ablation_experiment(
     with_heavy_tailed: bool,
 ) -> None:
     logger = logging.getLogger("ablation-studies")
-    result_dir.mkdir(parents=True)
+    result_dir.mkdir(parents=True, exist_ok=True)
 
     mode_results: Dict[Mode, List[AblationStudyResults]] = {mode: [] for mode in Mode}
 
@@ -372,9 +372,13 @@ def ablation_experiment(
                 with_heavy_tailed=with_heavy_tailed,
             )
             mode_results[mode].append(r)
+    if with_heavy_tailed:
+        filename_suffix = "_w_ht"
+    else:
+        filename_suffix = ""
     for mode, results in mode_results.items():
         summary = get_summary(results)
-        np.save(result_dir / f"mean_{mode.name}.npy", summary)
+        np.save(result_dir / f"mean_{mode.name}{filename_suffix}.npy", summary)
         logger.info(f"\n-- results for {mode.name} --\n" + format_summary(summary))
 
     logger.info(f"results saved in {result_dir}")

@@ -204,7 +204,7 @@ def _run_experiment_type(
             f"running for experiment type {experiment_type.name} and seed {seed}"
         )
         # dataset returned only for the sake of saving it
-        dataset = _run_seed_experiment(
+        dataset: SimulatedData = _run_seed_experiment(
             seed,
             experiment_type,
             datagen_settings,
@@ -214,7 +214,7 @@ def _run_experiment_type(
             num_samples_validation,
         )
         if dataset_save:
-            dataset.to_file(dataset_save / f"data_{seed}.hdf5")
+            dataset.to_file(dataset_save / experiment_type.name / f"data_{seed}.hdf5")
     return experiments_results
 
 
@@ -250,7 +250,7 @@ def _run_experiments(
             train_test_split,
         )
         target_file = results_dir / experiment_type.name / "quantitative_comparison.pdf"
-        target_file.parent.mkdir()
+        target_file.parent.mkdir(parents=True, exist_ok=True)
         plot_losses(experiments_results, target_file, show)
         all_results.append(experiments_results)
 
@@ -270,7 +270,7 @@ if __name__ == "__main__":
     logger = logging.getLogger("quant-studies")
 
     datagen_settings = DataGenSettings(
-        num_samples=10000,
+        num_samples=100000,
         split_fraction=0.9,
         noise_var=0.1,
         noise_skew=0.0,
@@ -279,16 +279,16 @@ if __name__ == "__main__":
 
     num_samples_validation: Tuple[int, ...] = (10, 100, 200, 500, 1000, 2000, 5000)
     num_seeds = 5
-    num_samples_train = 50
+    num_samples_train = 1000
     experiment_types = (ExperimentType.nonlinear, ExperimentType.polynomial)
     train_test_split = 0.5
     show_plots = False
 
     results_dir = (
         Path.cwd()
-        / f'results_quantitative_results_{datetime.now().strftime("%y_%m_%d_%H_%M_%S")}'
+        / f'results/'
     )
-    results_dir.mkdir(parents=True)
+    results_dir.mkdir(parents=True, exist_ok=True)
 
     _run_experiments(
         results_dir,

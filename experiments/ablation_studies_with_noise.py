@@ -74,9 +74,9 @@ if __name__ == "__main__":
 
     results_dir = (
         Path.cwd()
-        / f'results_ablation_with_noise_{datetime.now().strftime("%y_%m_%d_%H_%M_%S")}'
+        / f'results/ablation/'
     )
-    results_dir.mkdir(parents=True)
+    results_dir.mkdir(parents=True, exist_ok=True)
 
     seed = 42
     num_runs = 5

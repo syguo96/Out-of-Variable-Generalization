@@ -73,7 +73,7 @@ class DataGenSettings:
 
     def __init__(
         self,
-        num_samples: int = 10000,
+        num_samples: int = 100000,
         split_fraction: float = 0.9,
         noise_var: float = 0.1,
         noise_skew: float = 0.0,
@@ -130,6 +130,7 @@ class SimulatedData(object):
         return instance
 
     def to_file(self, file_path: Path, mode="w") -> None:
+        file_path.parent.mkdir(parents=True, exist_ok=True)
         logger = logging.getLogger("simulated data")
         logger.info(f"saving dataset to {file_path}")
         save_dict = {attr: getattr(self, attr) for attr in self.__slots__}

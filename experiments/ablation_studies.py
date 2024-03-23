@@ -35,7 +35,7 @@ if __name__ == "__main__":
     set_seed(42)
 
     results_dir = (
-        Path.cwd() / f'results_ablation_{datetime.now().strftime("%y_%m_%d_%H_%M_%S")}'
+        Path.cwd() / f'results/ablation/'
     )
     for k, v in datagen_settings.to_dict().items():
         logger.info(f"{k}:\t{v}")
