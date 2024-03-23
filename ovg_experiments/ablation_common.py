@@ -257,23 +257,24 @@ class AblationStudyResults:
                 r[level][pred_type]["perc"] = increase
         return r
 
-    def save(self, target_dir: Path) -> None:
+    def save(self, target_dir: Path, filename_suffix: str) -> None:
         target_dir.mkdir(exist_ok=True, parents=True)
-        np.save(target_dir / "results.npy", self._results)
-        np.save(target_dir / "summary.npy", self.summary_dict())
+        np.save(target_dir / f"results{filename_suffix}.npy", self._results)
+        np.save(target_dir / f"summary{filename_suffix}.npy", self.summary_dict())
 
 
-def _get_means(
+def _get_mean(
     results: Iterable[AblationStudyResults], level: Level, predictor_type: PredictorType
-) -> List[float]:
-    return [r.get_mean(level, predictor_type) for r in results]
+) -> float:
+    means = [r.get_mean(level, predictor_type) for r in results]
+    return np.mean(means)
 
 
-def _get_stds(
+def _get_std(
     results: Iterable[AblationStudyResults], level: Level, predictor_type: PredictorType
-) -> List[float]:
-    return [r.get_std(level, predictor_type) for r in results]
-
+) -> float:
+    stds =  [r.get_std(level, predictor_type) for r in results]
+    return np.mean(stds)
 
 def get_summary(
     results: Iterable[AblationStudyResults],
@@ -281,8 +282,8 @@ def get_summary(
     return {
         level: {
             pred_type: {
-                "mean": _get_means(results, level, pred_type),
-                "std": _get_stds(results, level, pred_type),
+                "mean": _get_mean(results, level, pred_type),
+                "std": _get_std(results, level, pred_type),
             }
             for pred_type in PredictorType
         }
@@ -360,6 +361,11 @@ def ablation_experiment(
 
     mode_results: Dict[Mode, List[AblationStudyResults]] = {mode: [] for mode in Mode}
 
+    if with_heavy_tailed:
+        filename_suffix = "_w_ht"
+    else:
+        filename_suffix = ""
+    
     for mode in (Mode.linear, Mode.general):
         for lr, hidden_size, epoch in product(lrs, hidden_sizes, epochs):
             r: AblationStudyResults = ablation_studies(
@@ -371,11 +377,9 @@ def ablation_experiment(
                 epoch,
                 with_heavy_tailed=with_heavy_tailed,
             )
-            mode_results[mode].append(r)
-    if with_heavy_tailed:
-        filename_suffix = "_w_ht"
-    else:
-        filename_suffix = ""
+            rdir = result_dir / mode.name
+            r.save(rdir, filename_suffix)
+            
     for mode, results in mode_results.items():
         summary = get_summary(results)
         np.save(result_dir / f"mean_{mode.name}{filename_suffix}.npy", summary)
