@@ -1,0 +1,11 @@
+*.pyc
+*__pycache__*
+.ipynb_checkpoints
+*.DS_Store
+*results_*
+*~
+*mypy_cache
+*flycheck_*
+build
+ovg.egg-info
+experiments/results
