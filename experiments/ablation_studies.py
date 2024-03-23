@@ -22,16 +22,13 @@ if __name__ == "__main__":
         noise_skew=0.0,
         noise_mean=0.0,
     )
-    config = AblationStudyConfig.from_dict(
-        {
-            "lrs": (0.01, 0.001),
-            "hidden_sizes": (64, 32),
-            "epochs": (30, 50),
-            "num_runs": 5,
-        }
+    config = AblationStudyConfig(
+        lrs=(0.01,0.001),
+        hidden_sizes=(64,32),
+        epochs=(30,50),
+        num_runs=5
     )
 
-    datagen_settings.num_samples = config.num_samples
     heavy_tailed = False
 
     seed = 42

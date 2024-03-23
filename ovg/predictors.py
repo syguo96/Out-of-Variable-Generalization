@@ -131,8 +131,8 @@ class ProposedPredictor(Predictor):
         self, lr: float = 0.01, hidden_size: int = 64, num_epochs: int = 50
     ) -> None:
         super().__init__()
-        self.model_reg_source: Optional[nn.Module] = None
-        self.model_derivative: Optional[nn.Module] = None
+        self.model_reg_source: Optional[NeuralNetwork] = None
+        self.model_derivative: Optional[NeuralNetwork] = None
         self.target_mean: Optional[float] = None
         self.y_scaler: Optional[Any] = None
         self.lr: float = lr
@@ -166,17 +166,20 @@ class ProposedPredictor(Predictor):
             or self.y_scaler is None
         ):
             raise RuntimeError("ProposedPredictor: method 'fit' should be called first")
-
         X = torch.from_numpy(X).float()
+        # !!!
         cond_mean = self.model_reg_source(X[:, :2]).detach().numpy()
+        #print("Proposed func:",self.model_reg_source(X[:, :2]))
+        # !!!
         output_deriv = self.y_scaler.inverse_transform(
             self.model_derivative(X[:, :2]).detach().numpy()
         )
         derivative = np.sign(output_deriv) * np.power(np.abs(output_deriv), 1 / 3)
-        return cond_mean + derivative * (
+        r = cond_mean + derivative * (
             X[:, 2].unsqueeze(1).detach().numpy() - self.target_mean
         )
-
+        return r
+        
     def __call__(self, data: pd.DataFrame) -> np.ndarray:
         if self.data_source is None:
             raise RuntimeError("ProposedPredictor: method 'fit' should be called first")

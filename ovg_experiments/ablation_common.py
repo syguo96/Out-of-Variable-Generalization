@@ -195,10 +195,10 @@ def train_predictors(
 ) -> Dict[PredictorType, Predictor]:
 
     predictors_dict = {
+        PredictorType.oracle: OptimalPredictor(),
         PredictorType.proposed: ProposedPredictor(
             lr=lr, hidden_size=hidden_size, num_epochs=num_epochs
         ),
-        PredictorType.oracle: OptimalPredictor(),
         PredictorType.marginal: MarginalPredictor(),
         PredictorType.imputation: ImputedPredictor(),
     }
@@ -329,6 +329,7 @@ def ablation_studies(
                 hidden_size=hidden_size,
                 num_epochs=epoch,
             )
+
             loss = compute_zero_shot_loss(
                 predictors_dict[PredictorType.oracle],
                 predictors_dict,
@@ -336,6 +337,7 @@ def ablation_studies(
                 num_samples=loss_num_samples,
                 systematic=loss_systematic,
             )
+
             for predictor_type, loss_value in loss.items():
                 results.add_loss(level, predictor_type, loss_value)
 
@@ -368,7 +370,6 @@ def ablation_experiment(
                 with_heavy_tailed=with_heavy_tailed,
             )
             mode_results[mode].append(r)
-
     for mode, results in mode_results.items():
         summary = get_summary(results)
         np.save(result_dir / f"mean_{mode.name}.npy", summary)

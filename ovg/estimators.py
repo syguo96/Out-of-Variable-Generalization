@@ -5,13 +5,23 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-# For typing hints related to numpy arrays
 from numpy.typing import ArrayLike
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-# For typing hints related to PyTorch tensors and data types
 from torch import Tensor
 from torch.utils.data import DataLoader
+
+
+class NeuralNetwork(nn.Module):
+    def __init__(self, input_size: int, hidden_size: int, output_size: int) -> None:
+        super(NeuralNetwork, self).__init__()
+        self.fc1 = nn.Linear(input_size, hidden_size)
+        self.fc2 = nn.Linear(hidden_size, output_size)
+
+    def forward(self, x: Tensor) -> Tensor:
+        x = torch.relu(self.fc1(x))
+        x = self.fc2(x)
+        return x
 
 
 class Dataset(torch.utils.data.Dataset):
@@ -28,7 +38,7 @@ class Dataset(torch.utils.data.Dataset):
         return len(self.x_data)
 
 
-def estimate_cond_mean(X: ArrayLike, Y: ArrayLike) -> nn.Module:
+def estimate_cond_mean(X: ArrayLike, Y: ArrayLike) -> NeuralNetwork:
     logger = logging.getLogger("ovg-estimator-cond-mean")
     logger.info("Training neural network to estimate a conditional mean")
     train_loader, test_loader = build_train_test_loaders(X, Y)
@@ -44,14 +54,14 @@ def estimate_cond_mean(X: ArrayLike, Y: ArrayLike) -> nn.Module:
 
 
 def estimate_cond_skew(
-    model_regression_source: nn.Module,
+    model_regression_source: NeuralNetwork,
     X_source: ArrayLike,
     Y_source: ArrayLike,
     X_target: ArrayLike,
     hidden_size: int = 64,
     lr: float = 0.01,
     num_epochs: int = 50,
-) -> Tuple[nn.Module, StandardScaler]:
+) -> Tuple[NeuralNetwork, StandardScaler]:
     logger = logging.getLogger("ovg-estimator-cond-skew")
     X_target_mean = np.mean(X_target)
     X_target_skew = np.mean((X_target - X_target_mean) ** 3)
@@ -85,7 +95,7 @@ def estimate_cond_skew(
 
 
 def train(
-    model: nn.Module,
+    model: NeuralNetwork,
     train_loader: DataLoader,
     verbose: bool = True,
     num_epochs: int = 10,
@@ -113,7 +123,7 @@ def train(
     return avg_loss
 
 
-def test(model: nn.Module, test_loader: DataLoader) -> float:
+def test(model: NeuralNetwork, test_loader: DataLoader) -> float:
     logger = logging.getLogger("ovg-test")
     criterion = nn.MSELoss()
     avg_loss = 0.0
@@ -151,13 +161,3 @@ def build_train_test_loaders(
     return train_loader, test_loader
 
 
-class NeuralNetwork(nn.Module):
-    def __init__(self, input_size: int, hidden_size: int, output_size: int) -> None:
-        super(NeuralNetwork, self).__init__()
-        self.fc1 = nn.Linear(input_size, hidden_size)
-        self.fc2 = nn.Linear(hidden_size, output_size)
-
-    def forward(self, x: Tensor) -> Tensor:
-        x = torch.relu(self.fc1(x))
-        x = self.fc2(x)
-        return x

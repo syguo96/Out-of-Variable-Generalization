@@ -50,8 +50,8 @@ def _run(
 
         predictors_dict = {
             PredictorType.oracle: OptimalPredictor(),
-            PredictorType.proposed: ProposedPredictor(),
             PredictorType.marginal: MarginalPredictor(),
+            PredictorType.proposed: ProposedPredictor(),
             PredictorType.imputation: ImputedPredictor(),
         }
 
