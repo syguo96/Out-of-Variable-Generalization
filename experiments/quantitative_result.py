@@ -57,7 +57,7 @@ def _average_over_experiments(
         #  to this num_samples
         # we average them in this new instance of ExperimentResults
         r_ = ExperimentsResult()
-        for predictor_type in PredictorType:
+        for predictor_type in [p for p in PredictorType if p != PredictorType.oracle]:
             all_values = [er._avg_errors[predictor_type] for er in experiments_results]
             avg_values = [sum(x) / len(x) for x in zip(*all_values)]
             r_._avg_errors[predictor_type] = avg_values
@@ -71,7 +71,6 @@ def plot_losses(
     # one line plot per predictory type
     # x axis: num of samples
     # y axis: average errors
-
     for predictor_type in [p for p in PredictorType if p != PredictorType.oracle]:
         # key: num samples, values: list of average errors
         results: Dict[int, List[float]] = {
@@ -97,6 +96,7 @@ def plot_losses(
     plt.savefig(target_file)
     if show:
         plt.show()
+    plt.clf()
 
 
 def _compute_ground_truth_loss(predictor: Predictor, data_target: pd.DataFrame):
