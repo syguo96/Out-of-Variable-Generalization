@@ -6,7 +6,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 
-from .estimators import estimate_cond_mean, estimate_cond_skew
+from .estimators import estimate_cond_mean, estimate_cond_skew, NeuralNetwork
 
 
 class Predictor:

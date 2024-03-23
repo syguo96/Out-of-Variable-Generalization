@@ -278,7 +278,7 @@ def _get_std(
 
 def get_summary(
     results: Iterable[AblationStudyResults],
-) -> Dict[Level, Dict[PredictorType, Dict[str, List[float]]]]:
+) -> Dict[Level, Dict[PredictorType, Dict[str, float]]]:
     return {
         level: {
             pred_type: {
@@ -292,7 +292,7 @@ def get_summary(
 
 
 def format_summary(
-    summary: Dict[Level, Dict[PredictorType, Dict[str, List[float]]]]
+    summary: Dict[Level, Dict[PredictorType, Dict[str, float]]]
 ) -> str:
     table_data = []
     headers = ["Level", "Method", "Mean", "Std"]
