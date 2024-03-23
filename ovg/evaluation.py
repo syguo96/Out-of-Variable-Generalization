@@ -59,7 +59,6 @@ def visualize_zero_shot(
     dpi: int = 100,
     fontsize: int = 20,
 ) -> None:
-
     logger = logging.getLogger("ovg-visualize_zero_shot")
     num_samples_per_dim = int(np.sqrt(num_samples))
     num_samples = num_samples_per_dim**2
