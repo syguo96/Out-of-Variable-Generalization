@@ -11,11 +11,20 @@ import pandas as pd
 import seaborn as sns
 import torch
 from numpy.typing import ArrayLike
-from ovg.predictors import Predictor
-from ovg_experiments.ablation_common import (PredictorType, SimulatedData,
-                                             train_predictors)
-from ovg_experiments.simulated_data import (DataGenSettings, ExperimentType,
-                                            generate_simulated_data)
+from ovg.predictors import (
+    ImputedPredictor,
+    MarginalPredictor,
+    OptimalPredictor,
+    Predictor,
+    PredictorType,
+    ProposedPredictor,
+)
+from ovg_experiments.simulated_data import (
+    SimulatedData,
+    DataGenSettings,
+    ExperimentType,
+    generate_simulated_data,
+)
 
 
 class ExperimentsResult:
@@ -37,11 +46,16 @@ def _average_over_experiments(
     num_samples_validation: Iterable[int],
     all_results: List[Dict[int, ExperimentsResult]],
 ) -> Dict[int, ExperimentsResult]:
+    # all results:
+    # List: one item per experiment type (nonlinear and polynomial)
+    # Dict: key: num samples, value: ExperimentResults
     r: Dict[int, ExperimentsResult] = {}
     for num_samples in num_samples_validation:
         experiments_results: List[ExperimentsResult] = [
             er[num_samples] for er in all_results
-        ]
+        ]  # Two ExperimentsResults (nonlinear and polynomial) corresponding
+        #  to this num_samples
+        # we average them in this new instance of ExperimentResults
         r_ = ExperimentsResult()
         for predictor_type in PredictorType:
             all_values = [er._avg_errors[predictor_type] for er in experiments_results]
@@ -54,12 +68,11 @@ def _average_over_experiments(
 def plot_losses(
     experiments_results: Dict[int, ExperimentsResult], target_file: Path, show: bool
 ) -> None:
-
     # one line plot per predictory type
     # x axis: num of samples
     # y axis: average errors
 
-    for predictor_type in PredictorType:
+    for predictor_type in [p for p in PredictorType if p != PredictorType.oracle]:
         # key: num samples, values: list of average errors
         results: Dict[int, List[float]] = {
             num_samples: experiment_results.get(predictor_type)
@@ -111,6 +124,26 @@ def _data_split(
     return dataset.data_source, data_target_train, data_target_test
 
 
+def _train_predictors(
+    data_source: pd.DataFrame,
+    data_train: pd.DataFrame,
+    lr: float = 0.01,
+    hidden_size: int = 64,
+    num_epochs: int = 50,
+) -> Dict[PredictorType, Predictor]:
+    predictors_dict = {
+        PredictorType.proposed: ProposedPredictor(
+            lr=lr, hidden_size=hidden_size, num_epochs=num_epochs
+        ),
+        PredictorType.marginal: MarginalPredictor(),
+        PredictorType.imputation: ImputedPredictor(),
+    }
+    for pred in predictors_dict.values():
+        pred.fit(data_source, data_train)
+
+    return predictors_dict
+
+
 def _run_seed_experiment(
     seed: int,
     experiment_type: ExperimentType,
@@ -120,7 +153,6 @@ def _run_seed_experiment(
     num_samples_train: int,
     num_samples_validation: Iterable[int],
 ) -> SimulatedData:
-
     _set_all_seeds(seed)
 
     dataset: SimulatedData = generate_simulated_data(experiment_type, datagen_settings)
@@ -128,7 +160,7 @@ def _run_seed_experiment(
     data_source, data_target_train, data_target_test = _data_split(
         dataset, train_test_split
     )
-    predictors: Dict[PredictorType, Predictor] = train_predictors(
+    predictors: Dict[PredictorType, Predictor] = _train_predictors(
         data_source, data_target_train.iloc[:num_samples_train, :]
     )
     predictors_loss: Dict[PredictorType, float] = {
@@ -136,14 +168,15 @@ def _run_seed_experiment(
         for predictor_type, predictor in predictors.items()
     }
 
-    reference_predictor: Predictor = predictors[PredictorType.oracle]
+    reference_predictor: Predictor = OptimalPredictor()
     for num_samples in num_samples_validation:
         reference_predictor.fit(data_source, data_target_train.iloc[:num_samples, :])
         loss = _compute_ground_truth_loss(reference_predictor, data_target_test)
         for predictor_type, predictor_loss in predictors_loss.items():
-            experiments_results[num_samples].add(
-                predictor_type, np.log(predictor_loss / loss)
-            )
+            if predictor_type != PredictorType.oracle:
+                experiments_results[num_samples].add(
+                    predictor_type, np.log(predictor_loss / loss)
+                )
 
     return dataset
 
@@ -157,7 +190,6 @@ def _run_experiment_type(
     dataset_save: Optional[Path] = None,
     train_test_split: float = 0.5,
 ) -> Dict[int, ExperimentsResult]:
-
     logger = logging.getLogger("quant-studies")
 
     # key: number of samples for validation
@@ -231,7 +263,6 @@ def _run_experiments(
 
 
 if __name__ == "__main__":
-
     logging.basicConfig(
         level=logging.INFO,
         handlers=[logging.StreamHandler(sys.stdout)],
@@ -245,12 +276,13 @@ if __name__ == "__main__":
         noise_skew=0.0,
         noise_mean=0.0,
     )
+
     num_samples_validation: Tuple[int, ...] = (10, 100, 200, 500, 1000, 2000, 5000)
     num_seeds = 5
     num_samples_train = 50
     experiment_types = (ExperimentType.nonlinear, ExperimentType.polynomial)
     train_test_split = 0.5
-    show_plots = True
+    show_plots = False
 
     results_dir = (
         Path.cwd()
