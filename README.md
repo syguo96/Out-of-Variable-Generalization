@@ -5,17 +5,19 @@ This code contains the official implementation of
 Siyuan Guo, Jonas Wildberger, Bernhard Schölkopf - [Out-of-Variable Generalization for Discriminative Models](https://arxiv.org/abs/2304.07896)
 
 This work highlights the efficiency to not observe joint variables for target inference task.
-In practice, to measure and observe all variables are difficult and costly. 
+In practice, to measure and observe all variables is difficult and costly. 
 This is akin to the process of animate learning: we, too, explore Nature by probing, observing, and
 measuring proper subsets of variables at any given time.
 
 ### Toy Example
 Suppose we aim to recover the joint distribution 
+
 ```math
 P(X_1, X_2, ... , X_n)
 ```
-Instead of observing all the variables at the same time, `X_1, X_2, ..., X_n`, 
-it is sufficient if we know the Markov Factorization, we observe `X_i, PA_i`in i-th environment. 
+Instead of observing all the variables at the same time, $`X_1, X_2, ..., X_n`$, 
+it is sufficient if we know the Markov Factorization, we observe $`X_i, PA_i`$ in i-th environment. 
+
 ```math
 P(X_1, X_2, ... , X_n) = \prod_i P(X_i | PA_i)
 ```
@@ -24,12 +26,12 @@ P(X_1, X_2, ... , X_n) = \prod_i P(X_i | PA_i)
 
 ![alt text](./images/figure1.png)
 
-Consider an SCM with additive noise `Y:= \phi(X_1, X_2, X_3) + \epsilon` with jointly independent causes and normal noise. 
-Assume that we do not have access to an environment jointly containing all variables `X_1, X_2, X_3, Y`. Instead, we have
-a source environment with jointly observed `X_1, X_2, Y`, and a target environment with jointly observed `X_2, X_3`, and unobserved `Y`.
-The goal is to predict `Y` given `X_2, X_3`.
+Consider an SCM with additive noise $`Y:= \phi(X_1, X_2, X_3) + \epsilon`$ with jointly independent causes and normal noise. 
+Assume that we do not have access to an environment jointly containing all variables $`X_1, X_2, X_3, Y`$. Instead, we have
+a source environment with jointly observed $`X_1, X_2, Y`$, and a target environment with jointly observed $`X_2, X_3`$, and unobserved $`Y`$.
+The goal is to predict $`Y`$ given $`X_2, X_3`$.
 
-**Intuition** We recover the relationship between `Y` and `X_3` thorugh noticing `X_3` though unobserved in the source is a generating factor of `Y`.
+**Intuition** We recover the relationship between $`Y`$ and $`X_3`$ through noticing $`X_3`$ through unobserved in the source is a generating factor of $`Y`$.
 Its information is not contained in the marginalized mean but also in the residual distribution of the error after fitting a discriminative model. 
 Thus by modelling the residual distribution from the source environment, we devise an algorithm to perform out-of-variable prediction in the target environment. 
 
@@ -39,11 +41,8 @@ Thus by modelling the residual distribution from the source environment, we devi
 
 ## How to run the code
 
-**Dependencies**
-1. Create a python 3.6+ environment 
-2. Run `pip install -r requirements.txt` 
+After installing the package (`pip install .`), the experiments folder:
 
-### Experiments
 * Get the contour plots in Fig 1 (b) - (e)
 
    `zero_shot_learning.ipynb`

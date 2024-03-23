@@ -1,3 +1,4 @@
+from typing import Tuple
 import logging
 from os.path import join
 from typing import Dict, Type
@@ -49,11 +50,16 @@ def compute_zero_shot_loss(
 
 
 def visualize_zero_shot(
-    predictors_dict: Dict[str, nn.Module],
+    predictors_dict: Dict[PredictorType, Predictor],
     data: DataFrame,
     save_dir: str,
     num_samples: int = 2500,
+    display: bool = True,
+    figsize: Tuple[int, int] = (12, 6),
+    dpi: int = 100,
+    fontsize: int = 20,
 ) -> None:
+
     logger = logging.getLogger("ovg-visualize_zero_shot")
     num_samples_per_dim = int(np.sqrt(num_samples))
     num_samples = num_samples_per_dim**2
@@ -68,15 +74,19 @@ def visualize_zero_shot(
         "X_2": X2.flatten(),
     }
     eval_df = pd.DataFrame(eval_frame)
-    for i, (name, predictor) in enumerate(predictors_dict.items()):
-        logger.info(f"Visualizing {name} predictor")
+    fig, axs = plt.subplots(
+        nrows=len(predictors_dict), ncols=1, figsize=figsize, dpi=dpi
+    )
+    for i, (predictor_type, predictor) in enumerate(predictors_dict.items()):
+        logger.info(f"Visualizing {predictor_type.name} predictor")
         Y_pred = predictor(eval_df).reshape(num_samples_per_dim, num_samples_per_dim)
-        fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(12, 6))
-        ax.contour(X1, X2, Y_pred, linewidths=10)
-        ax.set_xlabel(r"$X_2$", fontsize=60, weight="bold")
-        ax.set_ylabel(r"$X_3$", fontsize=60, weight="bold")
-        ax.set_xticks([])
-        ax.set_yticks([])
-        plt.tight_layout()
-        plt.savefig(join(save_dir, "zero_shot_" + str(name) + ".pdf"))
+        axs[i].contour(X1, X2, Y_pred, linewidths=10)
+        axs[i].set_xlabel(r"$X_2$", fontsize=fontsize, weight="bold")
+        axs[i].set_ylabel(r"$X_3$", fontsize=fontsize, weight="bold")
+        axs[i].set_xticks([])
+        axs[i].set_yticks([])
+        axs[i].set_title(predictor_type.name)
+    plt.tight_layout()
+    plt.savefig(join(save_dir, "zero_shot.pdf"))
+    if display:
         plt.show()

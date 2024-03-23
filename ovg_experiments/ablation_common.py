@@ -10,9 +10,14 @@ import numpy as np
 import pandas as pd
 import torch
 from ovg.evaluation import compute_zero_shot_loss
-from ovg.predictors import (ImputedPredictor, MarginalPredictor,
-                            OptimalPredictor, Predictor, PredictorType,
-                            ProposedPredictor)
+from ovg.predictors import (
+    ImputedPredictor,
+    MarginalPredictor,
+    OptimalPredictor,
+    Predictor,
+    PredictorType,
+    ProposedPredictor,
+)
 from tabulate import tabulate
 
 from .simulated_data import DataGenSettings, SimulatedData, scale_max_min
@@ -117,7 +122,6 @@ def ablation_simulated_data_generation(
     noise=0.1,
     with_heavy_tailed=False,
 ) -> SimulatedData:
-
     logger = logging.getLogger("ablation-data-generation")
 
     num_samples = datagen_settings.num_samples
@@ -207,9 +211,7 @@ def train_predictors(
 
     return predictors_dict
 
-
 class AblationStudyResults:
-
     def __init__(self):
         self._results = {
             level: {pred_type: [] for pred_type in PredictorType} for level in Level

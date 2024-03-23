@@ -7,3 +7,4 @@
 mypy.ini
 *mypy_cache
 *flycheck_*
+experiments/zero_shot_learning_polynomial_*
