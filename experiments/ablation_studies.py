@@ -1,6 +1,5 @@
 import logging
 import sys
-from datetime import datetime
 from pathlib import Path
 
 from ovg_experiments.ablation_common import (AblationStudyConfig,
@@ -8,7 +7,6 @@ from ovg_experiments.ablation_common import (AblationStudyConfig,
 from ovg_experiments.simulated_data import DataGenSettings
 
 if __name__ == "__main__":
-
     logging.basicConfig(
         level=logging.INFO,
         handlers=[logging.StreamHandler(sys.stdout)],
@@ -23,10 +21,7 @@ if __name__ == "__main__":
         noise_mean=0.0,
     )
     config = AblationStudyConfig(
-        lrs=(0.01,0.001),
-        hidden_sizes=(64,32),
-        epochs=(30,50),
-        num_runs=5
+        lrs=(0.01, 0.001), hidden_sizes=(64, 32), epochs=(30, 50), num_runs=5
     )
 
     heavy_tailed = False
@@ -34,9 +29,7 @@ if __name__ == "__main__":
     seed = 42
     set_seed(42)
 
-    results_dir = (
-        Path.cwd() / f'results/ablation/'
-    )
+    results_dir = Path.cwd() / "results/ablation/"
     for k, v in datagen_settings.to_dict().items():
         logger.info(f"{k}:\t{v}")
     logger.info(f"seed:\t{seed}")

@@ -1,13 +1,12 @@
 import logging
 import sys
-from datetime import datetime
 from pathlib import Path
 from typing import Dict, Iterable
 
-import numpy as np
-from ovg_experiments.ablation_common import (AblationStudyResults, Mode,
-                                             ablation_studies, format_summary,
-                                             set_seed)
+import tomli_w
+from ovg_experiments.ablation_common import (AblationStudyResults,
+                                             AblationStudySummary, Mode,
+                                             ablation_studies, set_seed)
 from ovg_experiments.simulated_data import DataGenSettings
 
 
@@ -20,7 +19,8 @@ def _main(
     epoch: int,
 ) -> None:
     results: Dict[str, Dict[Mode, AblationStudyResults]] = {
-        str(noise): {mode: AblationStudyResults() for mode in Mode} for noise in noises
+        str(noise): {mode: AblationStudyResults() for mode in Mode}
+        for noise in noises
     }
     for noise in noises:
         for mode in Mode:
@@ -42,29 +42,35 @@ def _main(
             }
             for k, v in config_.items():
                 logger.info(f"{k}:\t{v}")
-            logger.info(
-                "\nresults:\n" + format_summary(result.summary_dict())  # type: ignore
-            )
             results[str(noise)][mode] = result
 
     raw_results = {
-        str(noise): {mode: results[str(noise)][mode].raw() for mode in Mode}
-        for noise in noises
-    }
-    np.save(results_dir / "summary_noises.npy", raw_results)  # type: ignore
-
-    mean_table = {
         str(noise): {
-            mode: results[str(noise)][mode].summary_dict(with_perc=True)
-            for mode in Mode
+            mode.name: results[str(noise)][mode].raw() for mode in Mode
         }
         for noise in noises
     }
-    np.save(results_dir / "mean_table_noises.npy", mean_table)  # type: ignore
+    with open(str(results_dir / "summary_noises.toml"), "wb") as f:
+        tomli_w.dump(raw_results, f)
+
+    summaries = {
+        str(noise): {mode.name: AblationStudySummary() for mode in Mode}
+        for noise in noises
+    }
+    for noise in noises:
+        for mode in Mode:
+            summaries[str(noise)][mode.name].add(results[str(noise)][mode])
+
+    mean_table = {
+        str(noise): {
+            mode.name: summaries[str(noise)][mode.name].mean_std_perc()
+        }
+    }
+    with open(str(results_dir / "mean_table_noises.toml"), "wb") as f:
+        tomli_w.dump(mean_table, f)
 
 
 if __name__ == "__main__":
-
     logging.basicConfig(
         level=logging.INFO,
         handlers=[logging.StreamHandler(sys.stdout)],
@@ -72,10 +78,7 @@ if __name__ == "__main__":
 
     logger = logging.getLogger("ablation-studies-with-noise")
 
-    results_dir = (
-        Path.cwd()
-        / f'results/ablation/'
-    )
+    results_dir = Path.cwd() / "results/ablation/"
     results_dir.mkdir(parents=True, exist_ok=True)
 
     seed = 42
