@@ -8,17 +8,12 @@ from typing import Any, Dict, Iterable, List
 
 import numpy as np
 import pandas as pd
+import tomli_w
 import torch
 from ovg.evaluation import compute_zero_shot_loss
-from ovg.predictors import (
-    ImputedPredictor,
-    MarginalPredictor,
-    OptimalPredictor,
-    Predictor,
-    PredictorType,
-    ProposedPredictor,
-)
-from tabulate import tabulate
+from ovg.predictors import (ImputedPredictor, MarginalPredictor,
+                            OptimalPredictor, Predictor, PredictorType,
+                            ProposedPredictor)
 
 from .simulated_data import DataGenSettings, SimulatedData, scale_max_min
 
@@ -98,7 +93,9 @@ def _gaussian_kernel(xdata, l1, sigma_f, sigma_noise=2e-2):
     norm = np.square(diff[:, :, :] / l1[np.newaxis, np.newaxis, :])
     norm = np.sum(norm, axis=3)
 
-    kernel = np.square(sigma_f)[:, np.newaxis, np.newaxis] * np.exp(-0.5 * norm)
+    kernel = np.square(sigma_f)[:, np.newaxis, np.newaxis] * np.exp(
+        -0.5 * norm
+    )
     kernel += (sigma_noise) ** 2 * np.eye(num_total_points)
 
     return kernel
@@ -185,7 +182,9 @@ def ablation_simulated_data_generation(
     data_source = pd.DataFrame(data_dict_source)
     data_target = pd.DataFrame(data_dict_target)
 
-    dataset = SimulatedData(data_source, data_target, datagen_settings.to_dict())
+    dataset = SimulatedData(
+        data_source, data_target, datagen_settings.to_dict()
+    )
 
     return dataset
 
@@ -197,7 +196,6 @@ def train_predictors(
     hidden_size: int = 64,
     num_epochs: int = 50,
 ) -> Dict[PredictorType, Predictor]:
-
     predictors_dict = {
         PredictorType.oracle: OptimalPredictor(),
         PredictorType.proposed: ProposedPredictor(
@@ -211,21 +209,31 @@ def train_predictors(
 
     return predictors_dict
 
+
 class AblationStudyResults:
     def __init__(self):
         self._results = {
-            level: {pred_type: [] for pred_type in PredictorType} for level in Level
+            level: {pred_type: [] for pred_type in PredictorType}
+            for level in Level
         }
 
     def raw(self) -> Dict[Level, Dict[PredictorType, List[float]]]:
-        return self._results
+        return {
+            level.name: {
+                pred_type.name: self._results[level][pred_type]
+                for pred_type in PredictorType
+            }
+            for level in Level
+        }
 
     def add_loss(
         self, level: Level, predictor_type: PredictorType, loss: float
     ) -> None:
         self._results[level][predictor_type].append(loss)
 
-    def get_losses(self, level: Level, predictor_type: PredictorType) -> List[float]:
+    def get_losses(
+        self, level: Level, predictor_type: PredictorType
+    ) -> List[float]:
         return self._results[level][predictor_type]
 
     def get_mean(self, level: Level, predictor_type: PredictorType):
@@ -234,73 +242,64 @@ class AblationStudyResults:
     def get_std(self, level: Level, predictor_type: PredictorType):
         return np.std(self.get_losses(level, predictor_type))
 
-    def summary_dict(
-        self, with_perc: bool = False
-    ) -> Dict[Level, Dict[PredictorType, Dict[str, float]]]:
-        r = {
+
+class AblationStudySummary:
+    def __init__(self) -> None:
+        self._summary = {
             level: {
-                pred_type: {
-                    "mean": self.get_mean(level, pred_type),
-                    "std": self.get_std(level, pred_type),
+                pred_type: {"mean": [], "std": []}
+                for pred_type in PredictorType
+            }
+            for level in Level
+        }
+
+    def add(self, results: AblationStudyResults) -> None:
+        for level in Level:
+            for pred_type in PredictorType:
+                self._summary[level][pred_type]["mean"].append(
+                    results.get_mean(level, pred_type)
+                )
+                self._summary[level][pred_type]["std"].append(
+                    results.get_std(level, pred_type)
+                )
+
+    def mean_std(self):
+        return {
+            level.name: {
+                pred_type.name: {
+                    "mean": np.mean(self._summary[level][pred_type]["mean"]),
+                    "std": np.mean(self._summary[level][pred_type]["std"]),
                 }
                 for pred_type in PredictorType
             }
             for level in Level
         }
-        if not with_perc:
-            return r
+
+    def mean_std_perc(self):
+        mean_std = self.mean_std()
         for level in Level:
-            oracle_mean = r[level][PredictorType.oracle]["mean"]
+            oracle_mean = mean_std[level.name][PredictorType.oracle.name][
+                "mean"
+            ]
             for pred_type in PredictorType:
-                mean = r[level][pred_type]["mean"]
-                increase = (mean - oracle_mean) / oracle_mean
-                r[level][pred_type]["perc"] = increase
-        return r
+                mean = mean_std[level.name][pred_type.name]["mean"]
+                perc = (mean - oracle_mean) / oracle_mean
+                mean_std[level.name][pred_type.name]["perc"] = perc
+        return mean_std
 
     def save(self, target_dir: Path, filename_suffix: str) -> None:
         target_dir.mkdir(exist_ok=True, parents=True)
-        np.save(target_dir / f"results{filename_suffix}.npy", self._results)
-        np.save(target_dir / f"summary{filename_suffix}.npy", self.summary_dict())
-
-
-def _get_mean(
-    results: Iterable[AblationStudyResults], level: Level, predictor_type: PredictorType
-) -> float:
-    means = [r.get_mean(level, predictor_type) for r in results]
-    return np.mean(means)
-
-
-def _get_std(
-    results: Iterable[AblationStudyResults], level: Level, predictor_type: PredictorType
-) -> float:
-    stds =  [r.get_std(level, predictor_type) for r in results]
-    return np.mean(stds)
-
-def get_summary(
-    results: Iterable[AblationStudyResults],
-) -> Dict[Level, Dict[PredictorType, Dict[str, float]]]:
-    return {
-        level: {
-            pred_type: {
-                "mean": _get_mean(results, level, pred_type),
-                "std": _get_std(results, level, pred_type),
+        with open(
+            str(target_dir / f"summary{filename_suffix}.toml"), "wb"
+        ) as f:
+            summary = {
+                level.name: {
+                    pred_type.name: self._summary[level][pred_type]
+                    for pred_type in PredictorType
+                }
+                for level in Level
             }
-            for pred_type in PredictorType
-        }
-        for level in Level
-    }
-
-
-def format_summary(
-    summary: Dict[Level, Dict[PredictorType, Dict[str, float]]]
-) -> str:
-    table_data = []
-    headers = ["Level", "Method", "Mean", "Std"]
-    for level, methods in summary.items():
-        for method, stats in methods.items():
-            row = [level, method, stats["mean"], stats["std"]]
-            table_data.append(row)
-    return tabulate(table_data, headers=headers)
+            tomli_w.dump(summary, f)
 
 
 def ablation_studies(
@@ -359,16 +358,17 @@ def ablation_experiment(
     logger = logging.getLogger("ablation-studies")
     result_dir.mkdir(parents=True, exist_ok=True)
 
-    mode_results: Dict[Mode, List[AblationStudyResults]] = {mode: [] for mode in Mode}
+    mode_summary: Dict[Mode, AblationStudySummary] = {}
 
     if with_heavy_tailed:
         filename_suffix = "_w_ht"
     else:
         filename_suffix = ""
-    
+
     for mode in (Mode.linear, Mode.general):
+        summary = AblationStudySummary()
         for lr, hidden_size, epoch in product(lrs, hidden_sizes, epochs):
-            r: AblationStudyResults = ablation_studies(
+            results: AblationStudyResults = ablation_studies(
                 data_generation_settings,
                 mode,
                 num_runs,
@@ -377,12 +377,16 @@ def ablation_experiment(
                 epoch,
                 with_heavy_tailed=with_heavy_tailed,
             )
-            rdir = result_dir / mode.name
-            r.save(rdir, filename_suffix)
-            
-    for mode, results in mode_results.items():
-        summary = get_summary(results)
-        np.save(result_dir / f"mean_{mode.name}{filename_suffix}.npy", summary)
-        logger.info(f"\n-- results for {mode.name} --\n" + format_summary(summary))
+            summary.add(results)
+        rdir = result_dir / mode.name
+        summary.save(rdir, filename_suffix)
+        mode_summary[mode] = summary
+
+    for mode, summary in mode_summary.items():
+        mean_std_dict = summary.mean_std()
+        with open(
+            str(result_dir / f"mean_{mode.name}{filename_suffix}.toml"), "wb"
+        ) as f:
+            tomli_w.dump(mean_std_dict, f)
 
     logger.info(f"results saved in {result_dir}")

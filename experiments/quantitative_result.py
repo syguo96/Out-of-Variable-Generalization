@@ -11,20 +11,12 @@ import pandas as pd
 import seaborn as sns
 import torch
 from numpy.typing import ArrayLike
-from ovg.predictors import (
-    ImputedPredictor,
-    MarginalPredictor,
-    OptimalPredictor,
-    Predictor,
-    PredictorType,
-    ProposedPredictor,
-)
-from ovg_experiments.simulated_data import (
-    SimulatedData,
-    DataGenSettings,
-    ExperimentType,
-    generate_simulated_data,
-)
+from ovg.predictors import (ImputedPredictor, MarginalPredictor,
+                            OptimalPredictor, Predictor, PredictorType,
+                            ProposedPredictor)
+from ovg_experiments.simulated_data import (DataGenSettings, ExperimentType,
+                                            SimulatedData,
+                                            generate_simulated_data)
 
 
 class ExperimentsResult:
