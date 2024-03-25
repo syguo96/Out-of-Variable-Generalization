@@ -13,6 +13,7 @@ classifiers = [
 
 
 dependencies = [
+    "tomli-w",
     "h5py==3.8.0",
     "matplotlib==3.6.3",
     "scikit_learn==1.2.1",
